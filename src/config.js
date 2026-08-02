@@ -102,8 +102,12 @@ function splitEntries (raw, filePath) {
 
 function normaliseMod (entry, index, filePath) {
   const where = index === null ? '' : `mods[${index}]: `
+  // splitEntries already guarantees the single-mod entry is an object before we get here, so this
+  // branch is unreachable on that path today — but the label still has to be correct rather than
+  // "mods[null]" in case that guarantee is ever loosened.
   if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
-    throw new ConfigError(`${filePath}: mods[${index}] must be an object, for example {"root": "Mod"}.`, filePath)
+    const label = index === null ? 'the config' : `mods[${index}]`
+    throw new ConfigError(`${filePath}: ${label} must be an object, for example {"root": "Mod"}.`, filePath)
   }
   assertKnownKeys(entry, index === null ? TOP_LEVEL_KEYS : MOD_KEYS, index === null ? 'top level' : `mods[${index}]`, filePath)
 
