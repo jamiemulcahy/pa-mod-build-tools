@@ -2619,7 +2619,9 @@ git commit -m "Add the command line entry point"
 
 **Files:**
 - Modify: `README.md`
-- Create: `.modbuild` (this repository's own config is not needed — see step 4)
+
+This repository is a toolchain, not a mod, so it gets no `.modbuild` of its own. The configs used
+below are written to temporary files outside the reference clones.
 
 **Interfaces:**
 - Consumes: the finished command
