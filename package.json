@@ -15,7 +15,7 @@
     "schema/"
   ],
   "scripts": {
-    "test": "node --test test/**/*.test.js"
+    "test": "node --test"
   },
   "dependencies": {
     "ignore": "^7.0.0"
