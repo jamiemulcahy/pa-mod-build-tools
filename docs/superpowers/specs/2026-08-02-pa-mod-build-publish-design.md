@@ -178,6 +178,15 @@ only to have them read straight back into the object store.
   open question. The operation needs the source commit and the target ref and nothing else, both
   available from a shallow fetch. To be confirmed during implementation, but plumbing is what
   makes it reachable.
+- **Published blobs are byte-identical to source blobs.** Nothing passes through a working tree,
+  so no `.gitattributes` eol conversion is applied. A worktree checkout would apply it, and this
+  repo sets `text=auto eol=lf` — so the plumbing path removes a real risk of publishing files
+  whose line endings differ from the source.
+
+The chain was proven end to end against a clone of PaChat before this design was accepted: 39 of
+147 tracked files published, `root` prefix stripped, orphan commit parentless, an unchanged
+second run detected by tree-sha comparison, the caller's index and working tree untouched, and
+the resulting ref pushed to a remote.
 
 ### Ref resolution
 
@@ -205,9 +214,11 @@ Push is the default, local and CI alike — one code path, and `--dry-run` is th
 `--no-push` commits locally without pushing. When no remote is configured, the run commits and
 the report says plainly that nothing was pushed, rather than failing.
 
-`--dry-run` writes no object, moves no ref and pushes nothing. It does still *fetch* the target
-branch, because a report that cannot see the published tree cannot tell the author whether their
-next real run would produce a commit.
+`--dry-run` creates no commit, moves no ref and pushes nothing. It does still *fetch* the target
+branch and build the candidate tree, because a report that cannot see both cannot tell the author
+whether their next real run would produce a commit. Building the tree writes unreferenced tree
+objects, which are unreachable and collected by `git gc` — the repository's visible state is
+unchanged, but "writes nothing at all" would be an overclaim.
 
 ## Reporting
 
