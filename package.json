@@ -1,0 +1,27 @@
+{
+  "name": "pa-mod-build-tools",
+  "version": "0.0.0",
+  "description": "Build tools for Planetary Annihilation mod authors",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "pa-mod-build": "src/cli.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "src/",
+    "schema/"
+  ],
+  "scripts": {
+    "test": "node --test test/**/*.test.js"
+  },
+  "dependencies": {
+    "ignore": "^7.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jamiemulcahy/pa-mod-build-tools.git"
+  }
+}
