@@ -3,11 +3,6 @@
 Milestones are sequential — each one is usable on its own, and each is tracked by an
 enhancement issue carrying the full agreed detail and its open questions.
 
-> ⚠️ [#1](https://github.com/jamiemulcahy/pa-mod-build-tools/issues/1) is unresolved and
-> everything below assumes its answer. The design rests on a mod author being able to point PA
-> at a branch other than the repository default. If that turns out to be wrong, the source and
-> target relationship inverts.
-
 ## 0. Groundwork ✅
 
 Repository, branch ruleset, merge policy, security settings, roadmap, issues.

@@ -20,7 +20,7 @@ One command, wrapped in one GitHub Action step.
 
 You commit a `.modbuild` file describing which directory is your mod and which paths to leave
 out. On every push to your default branch, the action rebuilds a clean copy of just your mod
-and commits it to a dedicated publish branch, which is the branch PA scans.
+and commits it to a dedicated publish branch — the branch you point PA at.
 
 ```jsonc
 // .modbuild
