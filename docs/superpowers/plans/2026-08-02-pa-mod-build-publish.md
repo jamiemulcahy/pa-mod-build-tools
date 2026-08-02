@@ -51,7 +51,13 @@
 
 **Interfaces:**
 - Consumes: nothing
-- Produces: `npm test` runs `node --test test/`; the `ignore` package is installed and importable
+- Produces: `npm test` runs `node --test`; the `ignore` package is installed and importable
+
+`node --test` takes no path argument on purpose. `node --test test/` resolves `test/` as a module
+path on Node 22 and fails, and any glob form depends on shell expansion that differs across
+`cmd.exe`, POSIX `sh` and Node's own glob support (added in Node 21, so absent on the Node 20
+matrix legs). The bare form uses Node's built-in test discovery, which behaves identically on
+every leg of the CI matrix and skips `node_modules`.
 
 - [ ] **Step 1: Write `package.json`**
 
@@ -73,7 +79,7 @@
     "schema/"
   ],
   "scripts": {
-    "test": "node --test test/"
+    "test": "node --test"
   },
   "dependencies": {
     "ignore": "^7.0.0"
