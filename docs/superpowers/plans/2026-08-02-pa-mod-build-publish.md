@@ -181,7 +181,14 @@ import { parseConfig, ConfigError } from '../src/config.js'
 const parse = (obj) => parseConfig(JSON.stringify(obj), '.modbuild')
 
 function assertConfigError (fn, ...fragments) {
-  const error = assert.throws(fn, ConfigError)
+  // node:assert/strict's assert.throws() does not return the caught error, so capture it by hand.
+  let error
+  try {
+    fn()
+  } catch (caught) {
+    error = caught
+  }
+  assert.ok(error instanceof ConfigError, `expected a ConfigError to be thrown, got: ${error}`)
   for (const fragment of fragments) {
     assert.ok(
       error.message.includes(fragment),
