@@ -65,12 +65,13 @@ and can edit or delete.
 ## Try it
 
 The `publish` command itself works today, though it is not on npm yet, so you need a checkout
-of this repository to run it. From inside a checkout, pointed at your mod's git repository
-with `--repo` (or run from inside the mod's repository itself):
+of this repository to run it. Point it at your mod's git repository with `--repo`:
 
 ```bash
 node src/cli.js publish --repo /path/to/your/mod --dry-run
 ```
+
+If you run it from inside a mod's own git repository instead, `--repo` can be left out.
 
 Nothing is written or pushed. The report shows exactly which files would be published and
 which were left out, with the `.modbuild` rule that excluded each one.
