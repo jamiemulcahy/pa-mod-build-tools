@@ -118,7 +118,19 @@ test('a missing .modbuild exits 1 with an actionable message on stderr', async (
 
   assert.equal(result.code, 1)
   assert.match(result.stderr, /\.modbuild/)
-  assert.match(result.stderr, /docs\/setup\.md/)
+  assert.match(result.stderr, /README/)
+})
+
+test('an extra argument after publish exits 1 rather than being ignored', async (t) => {
+  const repo = await makeRepo({ '.modbuild': JSON.stringify({ root: 'Mod' }), 'Mod/modinfo.json': '{}' })
+  t.after(() => repo.cleanup())
+
+  const result = await runCli(['publish', 'published-mod'], { cwd: repo.dir })
+
+  assert.equal(result.code, 1)
+  assert.match(result.stderr, /published-mod/)
+  assert.match(result.stderr, /\.modbuild/)
+  await assert.rejects(() => repo.git('rev-parse', '--verify', 'refs/heads/published-mod'))
 })
 
 test('an unknown subcommand exits 1 and lists what is available', async () => {

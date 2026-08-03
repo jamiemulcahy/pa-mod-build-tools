@@ -22,7 +22,7 @@ export async function loadConfig (filePath) {
     if (cause.code === 'ENOENT') {
       throw new ConfigError(
         `No ${filePath} found. Every repository needs one: it says which directory is your mod ` +
-        'and which files to leave out. See docs/setup.md.',
+        "and which files to leave out. See this project's README for an example to copy.",
         filePath
       )
     }

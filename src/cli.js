@@ -59,6 +59,16 @@ async function main () {
     return fail(`Unknown command "${command}". The available command is: publish.\n\n${USAGE}`)
   }
 
+  // Someone typing `publish published-mod`, expecting a branch argument, would otherwise get a
+  // silent apparent success with the argument ignored.
+  if (parsed.positionals.length > 1) {
+    return fail(
+      `Unexpected argument "${parsed.positionals[1]}". publish takes no arguments of its own — ` +
+      'the branch each mod publishes to is set with "target" in .modbuild, not on the command ' +
+      `line.\n\n${USAGE}`
+    )
+  }
+
   const options = {
     repoPath: parsed.values.repo ?? process.env.PAMB_REPO ?? process.cwd(),
     configPath: parsed.values.config ?? process.env.PAMB_CONFIG ?? '.modbuild',
