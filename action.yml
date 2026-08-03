@@ -30,6 +30,11 @@ inputs:
 
 # There is deliberately no `target`, `token`, `push` or `repo` input. Each omission is load
 # bearing and is explained in docs/specs/action.md; test/action.test.js asserts they stay absent.
+#
+# The command reads two variables these inputs do not cover, PAMB_REPO and PAMB_PUSH. The
+# publish step sets both to the empty string, which the command reads as unset, so a variable
+# that happens to be in scope in the caller's workflow cannot reach in and change where the
+# action runs or whether it pushes.
 
 runs:
   using: 'composite'
@@ -45,6 +50,12 @@ runs:
         set -eu
         if ! command -v node >/dev/null 2>&1; then
           echo "::error::Node is not available on this runner. PA Mod Publish needs Node 20 or newer. Add a step running actions/setup-node@v4 with node-version: 20 before this one."
+          exit 1
+        fi
+        # Checked here rather than left to the install step below, which would fail with a bare
+        # "npm: command not found" and no indication of what was meant to provide it.
+        if ! command -v npm >/dev/null 2>&1; then
+          echo "::error::npm is not available on this runner, and PA Mod Publish installs its one dependency with it. Add a step running actions/setup-node@v4 with node-version: 20 before this one."
           exit 1
         fi
         version="$(node --version)"
@@ -74,3 +85,6 @@ runs:
         PAMB_SOURCE: ${{ inputs.source }}
         PAMB_CONFIG: ${{ inputs.config }}
         PAMB_DRY_RUN: ${{ inputs.dry-run }}
+        # Not inputs — pinned empty so the caller's environment cannot supply them. See above.
+        PAMB_REPO: ''
+        PAMB_PUSH: ''

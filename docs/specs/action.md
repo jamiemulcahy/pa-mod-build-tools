@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: jamiemulcahy/pa-mod-build-tools@v1
+      - uses: jamiemulcahy/pa-mod-build-tools@main
 ```
 
 That is the whole thing, and its shortness is a feature rather than a simplification for the
@@ -53,8 +53,19 @@ is read-only and pushing a branch is the entire point.
 | `config` | `PAMB_CONFIG` | `.modbuild` | Path to the `.modbuild` file. |
 | `dry-run` | `PAMB_DRY_RUN` | `false` | Resolve and report; write and push nothing. |
 
-Three inputs, each one an existing command-line option under a different name. The action
-sets these three variables and no others.
+Three inputs, each one an existing command-line option under a different name.
+
+The command reads two variables these inputs do not cover, `PAMB_REPO` and `PAMB_PUSH`. The
+action sets both to the empty string, which the command reads as unset. Leaving them out
+entirely would mean inheriting whatever the caller's workflow happened to have in scope, which
+is a way to change where the action runs or whether it pushes that no input can express and no
+reader of the workflow would see. Every variable the command reads is therefore accounted for:
+three carry an input, two are pinned shut.
+
+`dry-run` is rejected rather than assumed when it is neither true nor false. `dry-run: 'yes'`
+is a plausible thing to write, and reading it as "no" would publish a branch the author had
+just asked the action not to touch, then report that as a success. The same applies to any
+`PAMB_` variable holding a yes-or-no.
 
 Actions expressions collapse to an empty string rather than to nothing, so an input left
 unset by a `with:` block whose value came from an expression arrives as `PAMB_CONFIG=""`
@@ -130,14 +141,20 @@ Three steps, each with an explicit `shell: bash` — composite `run` steps have 
 shell, and omitting it is the single most common way to get a composite action wrong.
 
 1. **Check Node.** Fail with a message naming the found version and the required one if Node
-   is missing or older than 20. GitHub-hosted runners ship Node 20 or newer, so this step
-   passes silently there and exists for self-hosted runners, where the alternative is a
-   syntax error from deep inside the tool.
+   is missing or older than 20, and likewise if `npm` is missing, since the next step needs it
+   and would otherwise fail with a bare "command not found". GitHub-hosted runners ship Node 20
+   or newer, so this step passes silently there and exists for self-hosted runners, where the
+   alternative is a syntax error from deep inside the tool.
 2. **Install.** `npm ci --omit=dev --ignore-scripts --no-audit --no-fund`, with
    `working-directory: ${{ github.action_path }}`. `publish` has one runtime dependency,
    `ignore`. This requires `package-lock.json` to stay committed.
-3. **Run.** `node "$GITHUB_ACTION_PATH/src/cli.js" publish`, with the three environment
+3. **Run.** `node "$GITHUB_ACTION_PATH/src/cli.js" publish`, with the five environment
    variables set.
+
+`shell: bash` on a Windows runner means git-bash, which GitHub-hosted runners always have.
+A self-hosted Windows runner without it cannot run this action at all, and that is a limitation
+rather than something the action can detect for itself — a composite step needs a shell before
+it can check anything.
 
 `actions/setup-node` is deliberately absent. It is not merely a couple of seconds of runtime:
 a composite action that runs it changes the Node version for **every later step in the

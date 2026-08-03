@@ -6,7 +6,7 @@
 // it does, by running it for real against repositories built here on the runner.
 //
 //   node scripts/action-e2e.js setup <scenario>
-//   node scripts/action-e2e.js check <name> [argument]
+//   node scripts/action-e2e.js check <name>
 //   node scripts/action-e2e.js advance
 //
 // It lives in scripts/ rather than test/ despite being test code, because `node --test` treats
@@ -191,10 +191,10 @@ function advance () {
   report('source branch advanced by one commit')
 }
 
-function check (which, argument) {
+function check (which) {
   const assertion = CHECKS[which]
   if (assertion === undefined) fail(`Unknown check "${which ?? ''}".`)
-  assertion(argument)
+  assertion()
   report(`check passed: ${which}`)
 }
 
@@ -269,11 +269,11 @@ function fail (message) {
 // Dispatch last, not at the top of the file where it reads better. Most of the helpers above
 // are `const` arrow functions, and those stay in the temporal dead zone until their own
 // declaration runs — calling setup() any earlier reaches them before they exist.
-const [command, name, argument] = process.argv.slice(2)
+const [command, name] = process.argv.slice(2)
 
 try {
   if (command === 'setup') setup(name)
-  else if (command === 'check') check(name, argument)
+  else if (command === 'check') check(name)
   else if (command === 'advance') advance()
   else fail(`Unknown command "${command ?? ''}". Expected setup, check or advance.`)
 } catch (error) {
