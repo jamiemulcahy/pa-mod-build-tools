@@ -49,25 +49,21 @@ jobs:
       - name: Build the single-mod fixture
         run: $E2E setup single
 
-      # GITHUB_STEP_SUMMARY is redirected here so the report can be read back and asserted. The
-      # later publish steps leave it alone, so a real summary still renders on the run page.
+      # The report each of these steps produces is not asserted here, and cannot be: the runner
+      # sets GITHUB_STEP_SUMMARY itself for every step of a composite action and its value wins
+      # over any env: given to the `uses:` step, so there is no file a later step can read back.
+      # The report's content is covered by test/summary.test.js and test/cli.test.js; what
+      # renders on this run's own page is the end-to-end proof of it.
       - name: Publish (dry run)
         uses: ./_action
         with:
           dry-run: 'true'
-        env:
-          GITHUB_STEP_SUMMARY: ${{ runner.temp }}/summary-dry-run.md
 
       - name: A dry run writes and pushes nothing
-        run: $E2E check dry-run "$RUNNER_TEMP/summary-dry-run.md"
+        run: $E2E check dry-run
 
       - name: Publish
         uses: ./_action
-        env:
-          GITHUB_STEP_SUMMARY: ${{ runner.temp }}/summary-publish.md
-
-      - name: The report says what was published and what was left out
-        run: $E2E check summary "$RUNNER_TEMP/summary-publish.md"
 
       - name: The branch holds the payload, with the root prefix stripped
         run: $E2E check published

@@ -24,7 +24,7 @@
 // where `shell: bash` is git-bash and path handling is where this sort of thing quietly breaks.
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, writeFileSync, readdirSync, rmSync, existsSync, readFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -94,14 +94,14 @@ const SCENARIOS = {
 }
 
 const CHECKS = {
-  'dry-run': (summaryFile) => {
+  // What a dry run must not do, checked at both ends: nothing reached the remote, and nothing
+  // was written locally either. The report a dry run prints is asserted in test/summary.test.js
+  // and test/cli.test.js rather than here — see the note in docs/specs/action.md.
+  'dry-run': () => {
     assert.equal(remoteBranches().includes('published-mod'), false,
       'a dry run created a branch on the remote')
-    const summary = readSummary(summaryFile)
-    assert.match(summary, /dry run/i)
-    assert.match(summary, /Would create `published-mod`/)
-    // The payload count is what makes the report worth reading before a first real run.
-    assert.match(summary, /2 files/)
+    assert.equal(localBranches().includes('published-mod'), false,
+      'a dry run created a branch in the workspace')
   },
 
   published: () => {
@@ -134,16 +134,6 @@ const CHECKS = {
     // Built from `previous` using build/mod.json: the file added by the later commit is absent,
     // which no other combination of inputs produces.
     assertTree('published-mod', ['modinfo.json', 'old.js'])
-  },
-
-  summary: (summaryFile) => {
-    const summary = readSummary(summaryFile)
-    assert.match(summary, /## Mod publish/)
-    assert.match(summary, /`Mod` → `published-mod`/)
-    assert.match(summary, /Created `published-mod`/)
-    assert.match(summary, /Excluded 2 files/)
-    assert.match(summary, /`art\/logo\.psd`/)
-    assert.match(summary, /`\*\.psd`/)
   }
 }
 
@@ -256,12 +246,9 @@ function assertTree (branch, expected) {
 const commitCount = (branch) => Number(inRemote(['rev-list', '--count', branch]))
 const log = (branch) => inRemote(['log', '--format=%s', branch]).split('\n')
 
-function readSummary (file) {
-  if (!file) fail('This check needs the path of the step summary file as its argument.')
-  // Not merely a missing file: it means the runner did not pass GITHUB_STEP_SUMMARY through to
-  // the composite action's steps, so the report went somewhere unasserted.
-  assert.ok(existsSync(file), `no step summary was written to ${file}`)
-  return readFileSync(file, 'utf8')
+function localBranches () {
+  const output = git(['for-each-ref', '--format=%(refname:short)', 'refs/heads'], WORKSPACE)
+  return output === '' ? [] : output.split('\n')
 }
 
 function write (repo, files) {

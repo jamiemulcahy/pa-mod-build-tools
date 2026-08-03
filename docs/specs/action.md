@@ -234,8 +234,14 @@ Covered:
 - `dry-run: true`: no branch created, no commit, and the report still describes the payload.
 - `config` and `source` each demonstrably taking effect — a config outside the default path,
   and a build from an older commit producing that commit's payload.
-- The job summary: one step overrides `GITHUB_STEP_SUMMARY` to a known path and asserts the
-  rendered report; another leaves it alone so the real summary appears on the run page.
+
+The report is the one thing this layer cannot assert, and the reason is worth recording so
+nobody spends an afternoon rediscovering it. The runner sets `GITHUB_STEP_SUMMARY` itself for
+every step of a composite action, and its value wins over any `env:` given to the `uses:` step,
+so the report cannot be redirected to a path a later step could read back. Verified on both
+runners rather than assumed. What the report contains is covered by `test/summary.test.js` and
+`test/cli.test.js`, including that it goes to `$GITHUB_STEP_SUMMARY` and not to standard output
+when that variable is set; what renders on the workflow's own run page is the end-to-end proof.
 
 Windows is in the matrix because `shell: bash` on a Windows runner is git-bash rather than a
 POSIX shell, and path handling is where a composite action quietly breaks.
