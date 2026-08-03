@@ -233,6 +233,31 @@ test('publishing to the source branch is refused', async (t) => {
   assert.ok(error.message.includes('main'), error.message)
 })
 
+test('publishing to the branch that is checked out is refused', async (t) => {
+  const repo = await makeRepo({
+    '.modbuild': modbuild({ root: 'Mod', target: 'release' }),
+    'Mod/modinfo.json': '{}',
+    'NOTES.md': 'keep me'
+  })
+  t.after(() => repo.cleanup())
+
+  // "release" exists and is checked out; the run builds from main, so the source-branch guard
+  // does not fire and only the checked-out guard can catch this.
+  await repo.git('branch', 'release', 'main')
+  const before = (await repo.git('rev-parse', 'refs/heads/release')).stdout.trim()
+  await repo.git('checkout', '-q', 'release')
+
+  const error = await publish({ repoPath: repo.dir, source: 'main', push: false })
+    .catch((caught) => caught)
+
+  assert.ok(error instanceof PublishError, `expected PublishError, got ${error}`)
+  assert.ok(error.message.includes('release'), error.message)
+  assert.ok(/checked out/i.test(error.message), error.message)
+
+  assert.equal((await repo.git('rev-parse', 'refs/heads/release')).stdout.trim(), before)
+  assert.equal((await repo.git('status', '--porcelain')).stdout.trim(), '')
+})
+
 test('a missing modinfo.json warns, naming a deeper one when there is one', async (t) => {
   const repo = await makeRepo({
     '.modbuild': modbuild({ root: '.' }),

@@ -45,7 +45,13 @@ export async function publish ({
       'commit exists in this repository.'
     )
   }
-  const sourceBranch = source === 'HEAD' ? await git.currentBranch() : await git.refBranchName(source)
+  // Both branches that must never be published onto, resolved before anything is written.
+  // `git update-ref` moves a branch even when it is the one HEAD points at — unlike
+  // `git branch -f`, it does not refuse — and the working tree is left holding the old branch's
+  // files, so every source file shows up as added or renamed and `git reset --hard` would
+  // delete the author's work.
+  const checkedOutBranch = await git.currentBranch()
+  const sourceBranch = source === 'HEAD' ? checkedOutBranch : await git.refBranchName(source)
 
   for (const mod of mods) {
     if (sourceBranch !== null && mod.target === sourceBranch) {
@@ -53,6 +59,14 @@ export async function publish ({
         `The mod rooted at "${mod.root}" publishes to "${mod.target}", which is the branch being ` +
         'built from. Publishing onto the source branch would overwrite your work. Change ' +
         `"target" in ${configPath}, or build from a different branch with --source.`
+      )
+    }
+    if (checkedOutBranch !== null && mod.target === checkedOutBranch) {
+      throw new PublishError(
+        `The mod rooted at "${mod.root}" publishes to "${mod.target}", which is the branch you ` +
+        'currently have checked out. Publishing onto it would replace the branch under your ' +
+        'working tree and make every file in it look changed. Check out a different branch ' +
+        `first, or change "target" in ${configPath}.`
       )
     }
   }

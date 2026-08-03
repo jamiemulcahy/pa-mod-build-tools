@@ -48,9 +48,14 @@ export function createGit (repoPath) {
       return trimmed(['rev-parse', '--verify', '--end-of-options', `${ref}^{commit}`])
     },
 
+    // null when HEAD is detached, and also when HEAD cannot be resolved at all — an unborn
+    // branch in a repository with no commits yet, or one just created with `checkout --orphan`.
+    // "there is no checked-out branch to worry about" is the right answer in both cases, and a
+    // caller asking which branch is checked out should not be handed a fatal error for it.
     async currentBranch () {
-      const name = await trimmed(['rev-parse', '--abbrev-ref', 'HEAD'])
-      return name === 'HEAD' ? null : name
+      const { code, stdout } = await run(['rev-parse', '--abbrev-ref', 'HEAD'], { allowFailure: true })
+      const name = stdout.trim()
+      return code !== 0 || name === 'HEAD' ? null : name
     },
 
     async refBranchName (ref) {
