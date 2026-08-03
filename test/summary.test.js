@@ -50,6 +50,7 @@ test('excluded paths are listed with the rule that matched', () => {
 test('an unchanged mod says so and shows no commit', () => {
   const output = renderSummary(report({ mods: [modReport({ unchanged: true, commit: null, pushed: false })] }))
   assert.match(output, /no changes — nothing to publish/)
+  assert.doesNotMatch(output, /b{7}/)
 })
 
 test('a dry run is labelled and states that nothing was written', () => {
@@ -89,3 +90,27 @@ test('a mod with no exclusions omits the exclusions section', () => {
 test('rendering is deterministic', () => {
   assert.equal(renderSummary(report()), renderSummary(report()))
 })
+
+test('excluded files are explained with a framing sentence, not just a table', () => {
+  const output = renderSummary(report())
+  assert.match(output, /matched an ignore rule in `\.modbuild` and were not published/)
+})
+
+// The unit must escalate whenever the *displayed* (rounded) value would reach 1000, not just the
+// raw value — toFixed(1) can round e.g. 999999 bytes up to "1000.0" without the unit escalating,
+// which would print "1000.0 kB" instead of "1.0 MB". These pin the exact rendered string at and
+// around that boundary, in each unit.
+for (const [bytes, expected] of [
+  [999, '999 B'],
+  [1000, '1.0 kB'],
+  [999949, '999.9 kB'],
+  [999950, '1.0 MB'],
+  [999999, '1.0 MB'],
+  [1000000, '1.0 MB'],
+  [2500000000, '2.5 GB']
+]) {
+  test(`formats ${bytes} bytes as ${expected}`, () => {
+    const output = renderSummary(report({ mods: [modReport({ totalBytes: bytes })] }))
+    assert.match(output, new RegExp(expected.replace('.', '\\.')))
+  })
+}

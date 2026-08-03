@@ -49,6 +49,7 @@ function renderMod (mod, report) {
 
   if (mod.excluded.length > 0) {
     lines.push(`<details><summary>Excluded ${count(mod.excluded.length)}</summary>`, '')
+    lines.push(`These files matched an ignore rule in \`${report.configPath}\` and were not published.`, '')
     lines.push('| Path | Rule |', '| --- | --- |')
     for (const file of mod.excluded) {
       lines.push(`| \`${file.path}\` | \`${file.rule}\` |`)
@@ -63,12 +64,16 @@ const short = (sha) => (sha === null ? '' : sha.slice(0, 7))
 const count = (n) => `${n} file${n === 1 ? '' : 's'}`
 
 // Decimal units, matching how file sizes are quoted everywhere a mod author will see them.
+//
+// The escalation check compares the *rounded* (displayed) value against 1000, not the raw
+// value: toFixed(1) can round e.g. 999.9999 up to "1000.0", and without this check that would
+// print as "1000.0 kB" instead of escalating to "1.0 MB".
 function formatBytes (bytes) {
   if (bytes < 1000) return `${bytes} B`
   const units = ['kB', 'MB', 'GB']
   let value = bytes / 1000
   let unit = 0
-  while (value >= 1000 && unit < units.length - 1) {
+  while (Number(value.toFixed(1)) >= 1000 && unit < units.length - 1) {
     value /= 1000
     unit++
   }
