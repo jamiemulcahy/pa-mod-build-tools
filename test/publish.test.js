@@ -3,7 +3,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import path from 'node:path'
 import { tmpdir } from 'node:os'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile, chmod } from 'node:fs/promises'
 import { publish, PublishError } from '../src/publish.js'
 import { ConfigError } from '../src/config.js'
 import { makeRepo, makeBareRemote } from './helpers/repo.js'
@@ -199,6 +199,19 @@ test('a missing root is reported with a hint naming directories holding a modinf
   assert.ok(error.message.includes('Mod'), error.message)
 })
 
+test('the missing-root hint does not mistake a lookalike file for a manifest', async (t) => {
+  const repo = await makeRepo({
+    '.modbuild': modbuild({ root: 'Mods' }),
+    'Mod/custom_modinfo.json': '{}'
+  })
+  t.after(() => repo.cleanup())
+
+  const error = await publish({ repoPath: repo.dir, push: false }).catch((caught) => caught)
+  assert.ok(error instanceof PublishError)
+  assert.ok(!/directories.*contain a modinfo\.json/i.test(error.message), error.message)
+  assert.ok(/no modinfo\.json was found/i.test(error.message), error.message)
+})
+
 test('an empty payload is distinguished from a missing root', async (t) => {
   const repo = await makeRepo({
     '.modbuild': modbuild({ root: 'Mod', ignore: ['*'] }),
@@ -330,6 +343,52 @@ test('an existing origin branch is preferred over a stale local one', async (t) 
     first.mods[0].commit,
     'the new commit must sit on top of what origin published, not the stale local ref'
   )
+})
+
+test('a push failure on the second mod leaves the first committed and reports what was pushed', async (t) => {
+  const repo = await makeRepo({
+    '.modbuild': modbuild({
+      mods: [
+        { root: 'mods/a', target: 'published-a' },
+        { root: 'mods/b', target: 'published-b' }
+      ]
+    }),
+    'mods/a/modinfo.json': '{"version":"1"}',
+    'mods/b/modinfo.json': '{"version":"1"}'
+  })
+  const remote = await makeBareRemote()
+  t.after(async () => {
+    await repo.cleanup()
+    await remote.cleanup()
+  })
+  await repo.git('remote', 'add', 'origin', remote.dir)
+
+  // A pre-receive hook standing in for a flaky network or an auth failure that only shows up
+  // partway through a multi-mod push: it accepts published-a but rejects published-b, so the
+  // first mod's push succeeds and the second's fails deterministically.
+  const hookPath = path.join(remote.dir, 'hooks', 'pre-receive')
+  await writeFile(
+    hookPath,
+    '#!/bin/sh\nwhile read old new ref; do case "$ref" in *published-b*) exit 1;; esac; done\n'
+  )
+  await chmod(hookPath, 0o755)
+
+  const error = await publish({ repoPath: repo.dir }).catch((caught) => caught)
+
+  assert.ok(error, 'the push failure must reject the publish() call')
+  assert.ok(error.report, 'the thrown error must carry the partial report')
+  assert.equal(error.report.mods.length, 2)
+
+  const [a, b] = error.report.mods
+  assert.equal(a.target, 'published-a')
+  assert.equal(a.pushed, true)
+  assert.notEqual(a.commit, null)
+  assert.equal(b.target, 'published-b')
+  assert.equal(b.pushed, false)
+  assert.notEqual(b.commit, null, 'the second mod must still be committed locally even though the push failed')
+
+  assert.equal((await repo.git('rev-parse', 'published-a')).stdout.trim(), a.commit)
+  assert.equal((await repo.git('rev-parse', 'published-b')).stdout.trim(), b.commit)
 })
 
 test('running outside a git repository fails with an actionable message', async (t) => {

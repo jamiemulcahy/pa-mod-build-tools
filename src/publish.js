@@ -79,16 +79,36 @@ export async function publish ({
     mods: []
   }
 
-  for (const { mod, payload } of resolved) {
-    report.mods.push(await publishMod({
-      git, mod, payload, sizes, sourceSha, remote, identity, dryRun, push, repoPath
-    }))
+  // Phase 1 (local) and phase 2 (push) are kept separate, and both run inside this try so that
+  // whatever has already landed in `report` is attached to any error that escapes either phase.
+  // Local ref writes are effectively incapable of failing once validation has passed above, so in
+  // practice this confines the realistic failure surface — a flaky network, an auth failure, a
+  // remote that disappears mid-run — to the push phase. Without this, a failure pushing mod B
+  // would discard the report and silently strand the caller with no way to know mod A already
+  // reached the remote.
+  try {
+    for (const { mod, payload } of resolved) {
+      report.mods.push(await commitMod({ git, mod, payload, sizes, sourceSha, remote, identity, dryRun }))
+    }
+
+    if (push && remote !== null && !dryRun) {
+      for (const modReport of report.mods) {
+        if (modReport.commit === null) continue
+        await git.push(remote, modReport.commit, modReport.target)
+        modReport.pushed = true
+      }
+    }
+  } catch (cause) {
+    cause.report = report
+    throw cause
   }
 
   return report
 }
 
-async function publishMod ({ git, mod, payload, sizes, sourceSha, remote, identity, dryRun, push, repoPath }) {
+// Builds the tree and, when there is a change, creates the commit and moves the local branch ref.
+// Pushing is deliberately not this function's job — see the comment in publish() above.
+async function commitMod ({ git, mod, payload, sizes, sourceSha, remote, identity, dryRun }) {
   const included = payload.included.map((file) => ({ path: file.path, bytes: sizes.get(file.sha) ?? 0 }))
   const result = {
     root: mod.root,
@@ -131,11 +151,6 @@ async function publishMod ({ git, mod, payload, sizes, sourceSha, remote, identi
   })
   await git.updateRef(`refs/heads/${mod.target}`, commit)
   result.commit = commit
-
-  if (push && remote !== null) {
-    await git.push(remote, commit, mod.target)
-    result.pushed = true
-  }
   return result
 }
 
@@ -171,10 +186,12 @@ function assertUsablePayload (payload, mod, files, configPath) {
   )
 }
 
+// Anchored the same way warningsFor() anchors its "deeper" check below: a file merely ending in
+// "modinfo.json" (e.g. "custom_modinfo.json") is not a manifest and must not be suggested as one.
 function modinfoDirectories (files) {
   const directories = new Set()
   for (const file of files) {
-    if (!file.path.endsWith('modinfo.json')) continue
+    if (file.path !== 'modinfo.json' && !file.path.endsWith('/modinfo.json')) continue
     const slash = file.path.lastIndexOf('/')
     directories.add(slash === -1 ? '.' : file.path.slice(0, slash))
   }
