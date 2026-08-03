@@ -65,15 +65,21 @@ and can edit or delete.
 ## Try it
 
 The `publish` command itself works today, though it is not on npm yet, so you need a checkout
-of this repository to run it. Point it at your mod's git repository with `--repo`:
+of this repository to run it. From that checkout, point it at your mod's git repository:
 
 ```bash
-node /path/to/pa-mod-build-tools/src/cli.js publish --repo /path/to/your/mod --dry-run
+npm run publish-mod -- --repo /path/to/your/mod --dry-run
 ```
 
 Nothing is written or pushed. The report gives a count and total size for what would be
 published, and an itemised list of everything left out with the `.modbuild` rule that
 excluded it.
+
+The script is `publish-mod` rather than `publish` because npm reserves `publish` as a lifecycle
+hook of `npm publish` — a script by that name would run every time this package was released.
+
+[docs/specs/publish.md](docs/specs/publish.md) describes the whole command: the `.modbuild`
+format, what a run guarantees, and every way it can fail.
 
 ## Design decisions so far
 

@@ -15,7 +15,8 @@
     "schema/"
   ],
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "publish-mod": "node src/cli.js publish"
   },
   "dependencies": {
     "ignore": "^7.0.0"
