@@ -13,12 +13,21 @@ const run = promisify(execFile)
 // spaces, neither of which execFile can run.
 const cli = fileURLToPath(new URL('../src/cli.js', import.meta.url))
 
+// The suite itself runs in GitHub Actions, where GITHUB_STEP_SUMMARY and GITHUB_ACTIONS are
+// already set. Inheriting them would send every report to the job summary file instead of
+// stdout — and silently make the committer-identity test pass for the wrong reason — so they are
+// stripped here and each test opts in explicitly through `env`, which is applied last.
+function ambientEnv () {
+  const { GITHUB_STEP_SUMMARY, GITHUB_ACTIONS, ...rest } = process.env
+  return rest
+}
+
 async function runCli (args, { cwd, env = {} } = {}) {
   try {
     const { stdout, stderr } = await run(process.execPath, [cli, ...args], {
       cwd,
       encoding: 'utf8',
-      env: { ...process.env, PAMB_PUSH: 'false', ...env }
+      env: { ...ambientEnv(), PAMB_PUSH: 'false', ...env }
     })
     return { code: 0, stdout, stderr }
   } catch (error) {
