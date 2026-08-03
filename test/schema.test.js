@@ -1,7 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
-import { parseConfig, ConfigError, DEFAULT_ROOT, DEFAULT_TARGET } from '../src/config.js'
+import {
+  parseConfig, ConfigError, DEFAULT_ROOT, DEFAULT_TARGET, TOP_LEVEL_KEYS, MOD_KEYS
+} from '../src/config.js'
 
 const schema = JSON.parse(await readFile(new URL('../schema/modbuild.schema.json', import.meta.url), 'utf8'))
 
@@ -43,8 +45,22 @@ test('the keys the schema allows are exactly the keys config.js accepts', () => 
   // And nothing beyond them. "$schema" is top level only.
   assert.equal(accepts({ nonsense: 1 }), false)
   assert.equal(accepts({ mods: [{ $schema: 'x' }] }), false)
-  assert.deepEqual(Object.keys(multiForm.properties.mods.items.properties).sort(), ['ignore', 'root', 'target'])
-  assert.deepEqual(Object.keys(singleForm.properties).sort(), ['$schema', 'ignore', 'root', 'target'])
+})
+
+// The behavioural test above only walks the schema's keys and checks config.js takes them, so it
+// catches the schema permitting something config.js rejects. It is blind the other way round: a
+// key added to config.js and forgotten in the schema accepts every config anyone writes and shows
+// up only as a missing editor completion. Comparing the two declared key lists as sets closes
+// that side, and reads as one statement — these are the same set of keys — rather than two.
+test('the schema declares exactly the keys config.js declares, in both directions', () => {
+  const schemaTopLevel = [
+    ...new Set([...Object.keys(singleForm.properties), ...Object.keys(multiForm.properties)])
+  ]
+  assert.deepEqual(schemaTopLevel.sort(), [...TOP_LEVEL_KEYS].sort())
+  assert.deepEqual(
+    Object.keys(multiForm.properties.mods.items.properties).sort(),
+    [...MOD_KEYS].sort()
+  )
 })
 
 function sampleFor (key) {

@@ -3,8 +3,10 @@ import { readFile } from 'node:fs/promises'
 export const DEFAULT_ROOT = '.'
 export const DEFAULT_TARGET = 'published-mod'
 
-const MOD_KEYS = ['root', 'ignore', 'target']
-const TOP_LEVEL_KEYS = ['$schema', 'mods', ...MOD_KEYS]
+// Exported so the schema test can assert set-equality in both directions: the schema must not
+// allow a key this file rejects, and this file must not accept a key nobody added to the schema.
+export const MOD_KEYS = ['root', 'ignore', 'target']
+export const TOP_LEVEL_KEYS = ['$schema', 'mods', ...MOD_KEYS]
 
 export class ConfigError extends Error {
   constructor (message, filePath) {
