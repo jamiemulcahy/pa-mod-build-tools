@@ -1,7 +1,7 @@
 // src/publish.js
 import path from 'node:path'
 import { tmpdir } from 'node:os'
-import { rm } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { loadConfig } from './config.js'
 import { resolvePayload } from './payload.js'
 import { createGit } from './git.js'
@@ -143,12 +143,19 @@ async function commitMod ({ git, mod, payload, sizes, sourceSha, remote, identit
 
   // Deliberately in the OS temp directory, not inside .git: in a git worktree ".git" is a file,
   // not a directory, and writing into it would fail.
-  const indexFile = path.join(tmpdir(), `pamb-index-${process.pid}-${mod.target.replace(/[^\w.-]/g, '_')}`)
+  //
+  // A fresh mkdtemp directory per call rather than a name derived from the pid and the target.
+  // `git update-index --index-info` *adds to* whatever index it is given, so a leftover index
+  // from a run that was killed before its cleanup ran would be silently unioned with this
+  // payload — publishing files that were never meant to ship, which is the one failure this
+  // tool exists to prevent. mkdtemp makes the collision impossible rather than merely unlikely,
+  // and removes the predictable name in a shared directory along with it.
+  const indexDir = await mkdtemp(path.join(tmpdir(), 'pamb-index-'))
   let tree
   try {
-    tree = await git.buildTree(payload.included, indexFile)
+    tree = await git.buildTree(payload.included, path.join(indexDir, 'index'))
   } finally {
-    await rm(indexFile, { force: true })
+    await rm(indexDir, { recursive: true, force: true })
   }
 
   if (tip !== null && (await git.treeOf(tip)) === tree) {

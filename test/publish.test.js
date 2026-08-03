@@ -5,6 +5,7 @@ import path from 'node:path'
 import { tmpdir } from 'node:os'
 import { mkdtemp, rm, writeFile, chmod } from 'node:fs/promises'
 import { publish, PublishError } from '../src/publish.js'
+import { createGit } from '../src/git.js'
 import { ConfigError } from '../src/config.js'
 import { makeRepo, makeBareRemote } from './helpers/repo.js'
 
@@ -116,6 +117,48 @@ test('a change outside the payload creates no commit', async (t) => {
 
   assert.equal(report.mods[0].unchanged, true)
   assert.equal((await repo.git('rev-parse', 'published-mod')).stdout.trim(), before)
+})
+
+test('a scratch index left by an interrupted run cannot leak into a later publish', async (t) => {
+  const repo = await makeRepo({
+    '.modbuild': modbuild({ root: 'Mod' }),
+    'Mod/modinfo.json': '{}',
+    'leftover/from-another-run.txt': 'x'
+  })
+  t.after(() => repo.cleanup())
+
+  // Stands in for a run killed part way through buildTree, at the deterministic path the
+  // implementation used to reuse: same pid, same target. update-index --index-info adds to an
+  // existing index rather than replacing it, so anything still sitting there would be unioned
+  // with this payload and published.
+  const stalePath = path.join(tmpdir(), `pamb-index-${process.pid}-published-mod`)
+  t.after(() => rm(stalePath, { force: true }))
+  const git = createGit(repo.dir)
+  const stale = (await git.lsTree(repo.head)).filter((file) => file.path.startsWith('leftover/'))
+  assert.equal(stale.length, 1, 'the fixture must have something to leak')
+  await git.buildTree(stale, stalePath)
+
+  await publish({ repoPath: repo.dir, push: false })
+
+  assert.deepEqual(await listBranch(repo, 'published-mod'), ['modinfo.json'])
+})
+
+test('two consecutive publishes with different payloads do not accumulate files', async (t) => {
+  const repo = await makeRepo({
+    '.modbuild': modbuild({ root: 'Mod' }),
+    'Mod/modinfo.json': '{}',
+    'Mod/old.js': 'old'
+  })
+  t.after(() => repo.cleanup())
+
+  await publish({ repoPath: repo.dir, push: false })
+  assert.deepEqual(await listBranch(repo, 'published-mod'), ['modinfo.json', 'old.js'])
+
+  await repo.git('rm', '-q', 'Mod/old.js')
+  await repo.commit({ 'Mod/new.js': 'new' }, 'swap')
+  await publish({ repoPath: repo.dir, push: false })
+
+  assert.deepEqual(await listBranch(repo, 'published-mod'), ['modinfo.json', 'new.js'])
 })
 
 test('a payload change commits on top of the previous publish', async (t) => {
