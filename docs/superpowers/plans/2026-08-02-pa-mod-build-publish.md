@@ -4,7 +4,7 @@
 
 **Goal:** Ship `pa-mod-build publish` — a command that reads `.modbuild`, resolves one or more mod payloads from a git ref, commits each to its own publish branch, and reports what it did.
 
-**Architecture:** Six small ESM modules with one responsibility each. `config.js`, `payload.js` and `summary.js` are pure and carry most of the test coverage. `git.js` is the only module that touches `child_process`. `publish.js` orchestrates and returns a report object without printing. `cli.js` owns argv, environment, output routing and exit codes. The publish itself is ref-to-ref git plumbing — `update-index` → `write-tree` → `commit-tree` → `update-ref` — so no worktree is created and the caller's checkout is never touched.
+**Architecture:** Six small ESM modules with one responsibility each. `config.js`, `payload.js` and `summary.js` are pure and carry most of the test coverage. `git.js` is the only module under `src/` that touches `child_process` (`test/helpers/repo.js` shells out too, to build its own fixtures — fixtures that depended on the module under test would prove less than they appear to). `publish.js` orchestrates and returns a report object without printing. `cli.js` owns argv, environment, output routing and exit codes. The publish itself is ref-to-ref git plumbing — `update-index` → `write-tree` → `commit-tree` → `update-ref` — so no worktree is created and the caller's checkout is never touched.
 
 **Tech Stack:** Node 20+, ESM, `node:test` + `node:assert`, one runtime dependency ([`ignore`](https://www.npmjs.com/package/ignore)), `git` via `node:child_process.execFile`.
 
@@ -33,7 +33,7 @@
 | `schema/modbuild.schema.json` | JSON Schema for `.modbuild`. Editor support only — never loaded by the tool |
 | `src/config.js` | Read, validate and normalise `.modbuild` into `Mod[]`. Pure apart from one file read |
 | `src/payload.js` | `(files, mod) -> {included, excluded}`. Pure. No fs, no git |
-| `src/git.js` | Every `git` invocation. The only module importing `node:child_process` |
+| `src/git.js` | Every `git` invocation. The only module under `src/` importing `node:child_process` |
 | `src/publish.js` | Orchestration and ref mechanics. Returns a report; prints nothing |
 | `src/summary.js` | `report -> markdown string`. Pure |
 | `src/cli.js` | argv + env parsing, dispatch, output routing, exit codes |
@@ -1313,7 +1313,7 @@ export function createGit (repoPath) {
         (error, stdout, stderr) => {
           if (error && !allowFailure) {
             reject(new GitError(
-              `git ${args[2] ?? args[0]} failed: ${(stderr || error.message).trim()}`,
+              `git ${args[0]} failed: ${(stderr || error.message).trim()}`,
               { command: `git ${args.join(' ')}`, stderr: stderr ?? '', code: error.code ?? 1 }
             ))
             return
@@ -1345,14 +1345,18 @@ export function createGit (repoPath) {
     },
 
     async refBranchName (ref) {
+      // --symbolic-full-name combined with --end-of-options makes git echo the flag itself back
+      // as an extra leading output line instead of consuming it, so the real answer (if any) is
+      // always the last non-empty line. Reading the last line makes this correct whether or not
+      // that echo happens, which keeps --end-of-options here for consistency with every other
+      // rev-parse call in this file instead of dropping it as a special case.
       const { code, stdout } = await run(
-        // No --end-of-options here: combined with --symbolic-full-name, git echoes the flag back
-        // as a literal output line, so the branch name never parses. Verified on git 2.38.1.
-        ['rev-parse', '--symbolic-full-name', ref],
+        ['rev-parse', '--symbolic-full-name', '--end-of-options', ref],
         { allowFailure: true }
       )
       if (code !== 0) return null
-      const full = stdout.trim()
+      const lines = stdout.split('\n').map((line) => line.trim()).filter(Boolean)
+      const full = lines[lines.length - 1] ?? ''
       return full.startsWith('refs/heads/') ? full.slice('refs/heads/'.length) : null
     },
 
@@ -1437,14 +1441,17 @@ export function createGit (repoPath) {
       return stdout.split('\n').map((line) => line.trim()).includes(name)
     },
 
-    // Fetches just this branch, shallow-friendly. Returns false when the remote has no such
-    // branch, which is the first-publish case rather than an error.
+    // Fetches just this branch, shallow-friendly. Existence is tested separately from fetching so
+    // that a genuinely absent branch (the first-publish case, false) is never confused with a
+    // network, auth or misconfigured-remote failure — those throw, rather than being mistaken for
+    // "nothing published yet" and silently starting a fresh orphan branch.
     async fetchBranch (remote, branch) {
-      const { code } = await run(
-        ['fetch', '--no-tags', '--quiet', remote, `+refs/heads/${branch}:refs/remotes/${remote}/${branch}`],
-        { allowFailure: true }
-      )
-      return code === 0
+      const { stdout } = await run(['ls-remote', '--heads', remote, branch])
+      if (stdout.trim() === '') return false
+
+      // Keep the + refspec so a rewound remote branch still force-updates the local tracking ref.
+      await run(['fetch', '--no-tags', '--quiet', remote, `+refs/heads/${branch}:refs/remotes/${remote}/${branch}`])
+      return true
     },
 
     async push (remote, sha, branch) {

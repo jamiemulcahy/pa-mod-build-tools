@@ -95,7 +95,7 @@ src/
   cli.js                    # argv + env parsing, subcommand dispatch, rendering, exit codes
   config.js                 # load, validate and normalise .modbuild -> Mod[]
   payload.js                # (fileList, mod) -> { included, excluded }   <- pure
-  git.js                    # the only module that touches child_process
+  git.js                    # the only module under src/ that touches child_process
   publish.js                # orchestration + ref mechanics; returns a report, prints nothing
   summary.js                # report -> text                              <- pure
 schema/modbuild.schema.json
