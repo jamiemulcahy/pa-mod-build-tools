@@ -2614,8 +2614,12 @@ function fail (message) {
   process.exitCode = 1
 }
 
-const isTrue = (value) => value === 'true' || value === '1'
-const isFalse = (value) => value === 'false' || value === '0'
+// Function declarations, not const arrows. main() is invoked by main().catch(...) above and runs
+// synchronously as far as building `options`, which calls both of these, before it reaches its
+// first await. A `const` binding is in the temporal dead zone until its own declaration executes
+// — which is after main() has already needed it — so const arrows here throw ReferenceError.
+function isTrue (value) { return value === 'true' || value === '1' }
+function isFalse (value) { return value === 'false' || value === '0' }
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
