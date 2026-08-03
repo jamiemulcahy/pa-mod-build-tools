@@ -151,6 +151,25 @@ test('--help exits 0 and documents every option', async () => {
   }
 })
 
+test('a git failure is reported as a message, never as a stack trace', async (t) => {
+  const repo = await makeRepo({ '.modbuild': JSON.stringify({ root: 'Mod' }), 'Mod/modinfo.json': '{}' })
+  t.after(() => repo.cleanup())
+
+  // An origin that cannot be reached. Because this run pushes, the fetch failure is fatal, so a
+  // GitError reaches the CLI's top level — the common case for a mod author with no network.
+  await repo.git('remote', 'add', 'origin', path.join(repo.dir, 'no-such-remote'))
+
+  const result = await runCli(['publish'], { cwd: repo.dir, env: { PAMB_PUSH: 'true' } })
+
+  assert.equal(result.code, 1)
+  assert.match(result.stderr, /ls-remote|does not appear to be a git repository/i)
+  assert.equal(/^ {4}at /m.test(result.stderr), false, `stack frames leaked:\n${result.stderr}`)
+  assert.match(result.stderr, /origin/)
+  assert.match(result.stderr, /network connection/i)
+  // Nothing had been published when it failed, so there is no partial report worth printing.
+  assert.equal(result.stdout.trim(), '')
+})
+
 test('a partial multi-mod failure renders the partial report and keeps the error on stderr', async (t) => {
   const { makeBareRemote } = await import('./helpers/repo.js')
   const remote = await makeBareRemote()

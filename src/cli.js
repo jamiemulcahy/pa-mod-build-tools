@@ -5,6 +5,7 @@ import { appendFile } from 'node:fs/promises'
 import { publish, PublishError } from './publish.js'
 import { renderSummary } from './summary.js'
 import { ConfigError } from './config.js'
+import { GitError } from './git.js'
 
 const USAGE = `pa-mod-build publish [options]
 
@@ -31,6 +32,9 @@ const OPTIONS = {
   help: { type: 'boolean' }
 }
 
+// Only a genuinely unexpected exception reaches here — the three known error types are handled
+// in main() and reported without a trace. Anything else is a bug in this tool rather than
+// something the author did, and the stack is the useful part of the report.
 main().catch((error) => {
   process.stderr.write(`${error?.stack ?? error}\n`)
   process.exitCode = 1
@@ -71,12 +75,33 @@ async function main () {
     // through (e.g. the second mod's push fails after the first mod's commit already landed).
     // Render what did happen to the same destination as a normal report, so the user isn't left
     // wondering which mods, if any, went out — while the error itself still goes to stderr below.
-    if (error?.report) await write(renderSummary(error.report))
+    // A report with no mods in it says nothing (the run failed before the first one finished),
+    // and printing a bare header above the error would only be noise.
+    if (error?.report?.mods?.length > 0) await write(renderSummary(error.report))
     if (error instanceof ConfigError || error instanceof PublishError) return fail(error.message)
+    if (error instanceof GitError) return fail(describeGitError(error))
     throw error
   }
 
   await write(renderSummary(report))
+}
+
+// A GitError is an ordinary thing to hit — an unreachable remote, a DNS failure, an auth
+// rejection — and its message already carries git's own stderr, which is the explanation. A
+// stack trace of this tool's internals would only bury it. The commands that talk to a remote
+// get an extra line, because "could not resolve host" is not obviously about *this* remote to
+// someone who did not know the tool contacts one at all.
+const REMOTE_COMMANDS = ['fetch', 'push', 'ls-remote']
+
+function describeGitError (error) {
+  // error.command is "git <subcommand> <args...>"; the remote is the first bare argument.
+  const [, subcommand, ...args] = (error.command ?? '').split(' ')
+  if (!REMOTE_COMMANDS.includes(subcommand)) return error.message
+
+  const remote = args.find((argument) => !argument.startsWith('-'))
+  const named = remote === undefined ? 'the remote' : `the remote "${remote}"`
+  return `${error.message}\n\nThis step contacts ${named}. Check your network connection and ` +
+    'that you still have access to that repository.'
 }
 
 async function write (text) {
