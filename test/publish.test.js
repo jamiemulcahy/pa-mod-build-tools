@@ -5,7 +5,7 @@ import path from 'node:path'
 import { tmpdir } from 'node:os'
 import { mkdtemp, rm, writeFile, chmod } from 'node:fs/promises'
 import { publish, PublishError } from '../src/publish.js'
-import { createGit } from '../src/git.js'
+import { createGit, GitError } from '../src/git.js'
 import { ConfigError } from '../src/config.js'
 import { makeRepo, makeBareRemote } from './helpers/repo.js'
 
@@ -411,6 +411,66 @@ test('an existing origin branch is preferred over a stale local one', async (t) 
     first.mods[0].commit,
     'the new commit must sit on top of what origin published, not the stale local ref'
   )
+})
+
+// An "origin" that cannot be reached at all: the URL is a path that does not exist, so every
+// command that contacts it fails the way a dead network or a revoked credential would.
+const addBrokenOrigin = (repo) => repo.git('remote', 'add', 'origin', path.join(repo.dir, 'no-such-remote'))
+
+test('a run that will not push survives an unreachable remote and says so', async (t) => {
+  const repo = await makeRepo({ '.modbuild': modbuild({ root: 'Mod' }), 'Mod/modinfo.json': '{}' })
+  t.after(() => repo.cleanup())
+  await addBrokenOrigin(repo)
+
+  const report = await publish({ repoPath: repo.dir, push: false })
+
+  assert.equal(report.remoteUnreachable, true)
+  assert.notEqual(report.mods[0].commit, null, 'the run must still publish locally')
+  assert.equal(report.mods[0].created, true)
+  assert.equal(
+    (await repo.git('rev-parse', 'refs/heads/published-mod')).stdout.trim(),
+    report.mods[0].commit
+  )
+})
+
+test('a dry run survives an unreachable remote', async (t) => {
+  const repo = await makeRepo({ '.modbuild': modbuild({ root: 'Mod' }), 'Mod/modinfo.json': '{}' })
+  t.after(() => repo.cleanup())
+  await addBrokenOrigin(repo)
+
+  const report = await publish({ repoPath: repo.dir, dryRun: true })
+
+  assert.equal(report.remoteUnreachable, true)
+  assert.equal(report.mods[0].fileCount, 1)
+})
+
+test('an unreachable remote falls back to the local branch, not to an orphan', async (t) => {
+  const repo = await makeRepo({ '.modbuild': modbuild({ root: 'Mod' }), 'Mod/modinfo.json': '{"v":1}' })
+  t.after(() => repo.cleanup())
+
+  // Publish once with no remote at all, so a local published-mod exists to fall back to.
+  const first = await publish({ repoPath: repo.dir, push: false })
+  await addBrokenOrigin(repo)
+
+  await repo.commit({ 'Mod/modinfo.json': '{"v":2}' }, 'bump')
+  const second = await publish({ repoPath: repo.dir, push: false })
+
+  assert.equal(second.remoteUnreachable, true)
+  assert.equal(second.mods[0].created, false, 'the local branch must be found, not started afresh')
+  const parents = await repo.git('rev-list', '--parents', '-n', '1', second.mods[0].commit)
+  assert.equal(parents.stdout.trim().split(' ')[1], first.mods[0].commit)
+})
+
+test('a run that will push still fails on an unreachable remote', async (t) => {
+  const repo = await makeRepo({ '.modbuild': modbuild({ root: 'Mod' }), 'Mod/modinfo.json': '{}' })
+  t.after(() => repo.cleanup())
+  await addBrokenOrigin(repo)
+
+  const error = await publish({ repoPath: repo.dir }).catch((caught) => caught)
+
+  assert.ok(error instanceof GitError, `expected a GitError, got ${error}`)
+  const { code } = await createRefCheck(repo, 'published-mod')
+  assert.equal(code, 1, 'building on a stale base and pushing it must not be attempted')
 })
 
 test('a push failure on the second mod leaves the first committed and reports what was pushed', async (t) => {

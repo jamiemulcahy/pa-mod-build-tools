@@ -85,27 +85,34 @@ export async function publish ({
   const remote = (await git.hasRemote('origin')) ? 'origin' : null
   const identity = env.GITHUB_ACTIONS ? ACTIONS_IDENTITY : null
 
+  // Whether this run will actually push decides how a failed fetch is treated below.
+  const willPush = push && remote !== null && !dryRun
+
   const report = {
     configPath,
     dryRun,
     source: { ref: source, sha: sourceSha, branch: sourceBranch },
     remote,
+    remoteUnreachable: false,
     mods: []
   }
 
   // Phase 1 (local) and phase 2 (push) are kept separate, and both run inside this try so that
   // whatever has already landed in `report` is attached to any error that escapes either phase.
-  // Local ref writes are effectively incapable of failing once validation has passed above, so in
-  // practice this confines the realistic failure surface — a flaky network, an auth failure, a
-  // remote that disappears mid-run — to the push phase. Without this, a failure pushing mod B
-  // would discard the report and silently strand the caller with no way to know mod A already
-  // reached the remote.
+  // Phase 2 is what confines *push* failures: a failure pushing mod B would otherwise discard the
+  // report and strand the caller with no way to know mod A already reached the remote. Phase 1
+  // can still fail on its own — it fetches the target branch, and it moves local refs — and the
+  // partial report is attached either way.
   try {
     for (const { mod, payload } of resolved) {
-      report.mods.push(await commitMod({ git, mod, payload, sizes, sourceSha, remote, identity, dryRun }))
+      const modReport = await commitMod({
+        git, mod, payload, sizes, sourceSha, remote, identity, dryRun, willPush
+      })
+      if (modReport.remoteUnreachable) report.remoteUnreachable = true
+      report.mods.push(modReport)
     }
 
-    if (push && remote !== null && !dryRun) {
+    if (willPush) {
       for (const modReport of report.mods) {
         if (modReport.commit === null) continue
         await git.push(remote, modReport.commit, modReport.target)
@@ -122,7 +129,7 @@ export async function publish ({
 
 // Builds the tree and, when there is a change, creates the commit and moves the local branch ref.
 // Pushing is deliberately not this function's job — see the comment in publish() above.
-async function commitMod ({ git, mod, payload, sizes, sourceSha, remote, identity, dryRun }) {
+async function commitMod ({ git, mod, payload, sizes, sourceSha, remote, identity, dryRun, willPush }) {
   const included = payload.included.map((file) => ({ path: file.path, bytes: sizes.get(file.sha) ?? 0 }))
   const result = {
     root: mod.root,
@@ -135,10 +142,12 @@ async function commitMod ({ git, mod, payload, sizes, sourceSha, remote, identit
     unchanged: false,
     created: false,
     commit: null,
-    pushed: false
+    pushed: false,
+    remoteUnreachable: false
   }
 
-  const tip = await resolveTarget(git, mod.target, remote)
+  const { tip, remoteUnreachable } = await resolveTarget(git, mod.target, remote, !willPush)
+  result.remoteUnreachable = remoteUnreachable
   result.created = tip === null
 
   // Deliberately in the OS temp directory, not inside .git: in a git worktree ".git" is a file,
@@ -177,14 +186,31 @@ async function commitMod ({ git, mod, payload, sizes, sourceSha, remote, identit
 
 // origin is preferred so a local run and an Actions run commit on top of the same thing, and a
 // stale local branch cannot cause a bad publish.
-async function resolveTarget (git, target, remote) {
-  if (remote !== null && (await git.fetchBranch(remote, target))) {
-    return git.revParse(`refs/remotes/${remote}/${target}`)
+//
+// Whether an unreachable remote is fatal depends on what the run is going to do with the answer.
+// A run that will push must not build on a stale base and then publish it, so the fetch failure
+// stays fatal there. A run that will not push — --no-push or --dry-run, the modes someone reaches
+// for on a train or behind a flaky VPN — falls back to the local branch and says so in the
+// report, because failing outright would make the offline modes useless for the one thing they
+// are for.
+async function resolveTarget (git, target, remote, toleratesFetchFailure) {
+  let remoteUnreachable = false
+
+  if (remote !== null) {
+    try {
+      if (await git.fetchBranch(remote, target)) {
+        return { tip: await git.revParse(`refs/remotes/${remote}/${target}`), remoteUnreachable }
+      }
+    } catch (cause) {
+      if (!toleratesFetchFailure) throw cause
+      remoteUnreachable = true
+    }
   }
+
   if (await git.refExists(`refs/heads/${target}`)) {
-    return git.revParse(`refs/heads/${target}`)
+    return { tip: await git.revParse(`refs/heads/${target}`), remoteUnreachable }
   }
-  return null
+  return { tip: null, remoteUnreachable }
 }
 
 function assertUsablePayload (payload, mod, files, configPath) {

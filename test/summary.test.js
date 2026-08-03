@@ -82,6 +82,20 @@ test('a run with no remote says nothing was pushed', () => {
   assert.match(output, /not pushed|no remote/i)
 })
 
+test('an unreachable remote is called out at the top of the report', () => {
+  const output = renderSummary(report({
+    remoteUnreachable: true,
+    mods: [modReport({ pushed: false })]
+  }))
+  assert.match(output, /could not be reached/i)
+  assert.match(output, /origin/)
+  assert.match(output, /local branches/i)
+})
+
+test('a report with a reachable remote says nothing about reachability', () => {
+  assert.doesNotMatch(renderSummary(report()), /could not be reached/i)
+})
+
 test('a mod with no exclusions omits the exclusions section', () => {
   const output = renderSummary(report({ mods: [modReport({ excluded: [] })] }))
   assert.equal(/Excluded/.test(output), false)

@@ -9,6 +9,16 @@ export function renderSummary (report) {
   if (report.dryRun) {
     lines.push('', 'Nothing was committed or pushed. This is what a real run would do.')
   }
+  // Stated plainly rather than buried: the comparison that decides whether there is anything to
+  // publish used a local branch, which may be behind what is actually on the remote.
+  if (report.remoteUnreachable) {
+    lines.push(
+      '',
+      `> ⚠ **Warning.** The remote \`${report.remote}\` could not be reached, so this run compared ` +
+      'against your local branches instead of what is published there. Nothing was pushed. Run ' +
+      'again with a working connection to be sure of the result.'
+    )
+  }
   lines.push('')
 
   for (const mod of report.mods) {
