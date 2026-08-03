@@ -68,13 +68,12 @@ The `publish` command itself works today, though it is not on npm yet, so you ne
 of this repository to run it. Point it at your mod's git repository with `--repo`:
 
 ```bash
-node src/cli.js publish --repo /path/to/your/mod --dry-run
+node /path/to/pa-mod-build-tools/src/cli.js publish --repo /path/to/your/mod --dry-run
 ```
 
-If you run it from inside a mod's own git repository instead, `--repo` can be left out.
-
-Nothing is written or pushed. The report shows exactly which files would be published and
-which were left out, with the `.modbuild` rule that excluded each one.
+Nothing is written or pushed. The report gives a count and total size for what would be
+published, and an itemised list of everything left out with the `.modbuild` rule that
+excluded it.
 
 ## Design decisions so far
 
