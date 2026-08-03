@@ -101,17 +101,11 @@ async function main () {
 // stack trace of this tool's internals would only bury it. The commands that talk to a remote
 // get an extra line, because "could not resolve host" is not obviously about *this* remote to
 // someone who did not know the tool contacts one at all.
-const REMOTE_COMMANDS = ['fetch', 'push', 'ls-remote']
-
 function describeGitError (error) {
-  // error.command is "git <subcommand> <args...>"; the remote is the first bare argument.
-  const [, subcommand, ...args] = (error.command ?? '').split(' ')
-  if (!REMOTE_COMMANDS.includes(subcommand)) return error.message
+  if (error.remote == null) return error.message
 
-  const remote = args.find((argument) => !argument.startsWith('-'))
-  const named = remote === undefined ? 'the remote' : `the remote "${remote}"`
-  return `${error.message}\n\nThis step contacts ${named}. Check your network connection and ` +
-    'that you still have access to that repository.'
+  return `${error.message}\n\nThis step contacts the remote "${error.remote}". Check your network ` +
+    'connection and that you still have access to that repository.'
 }
 
 async function write (text) {

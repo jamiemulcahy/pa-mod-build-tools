@@ -128,3 +128,13 @@ for (const [bytes, expected] of [
     assert.match(output, new RegExp(expected.replace('.', '\\.')))
   })
 }
+
+test('an unchanged mod that still needed pushing says so rather than "nothing to publish"', () => {
+  const output = renderSummary(report({
+    mods: [modReport({ unchanged: true, commit: null, head: 'c'.repeat(40), pushed: true })]
+  }))
+  assert.match(output, /no new commit was needed/)
+  assert.match(output, /had not reached `origin`/)
+  assert.match(output, /c{7}/)
+  assert.doesNotMatch(output, /nothing to publish/)
+})

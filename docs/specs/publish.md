@@ -80,7 +80,9 @@ These hold for every run and are the things it is safe to rely on.
 - **The caller's repository is left alone.** No file is written into the working tree, nothing is
   staged, and the checked-out branch is never moved.
 - **A run that changes nothing produces no commit.** A push that touched only files outside the
-  payload does not create an empty one.
+  payload does not create an empty one. Pushing, though, is decided by what the remote actually
+  holds rather than by whether a commit was made, so a branch that exists only locally is still
+  sent the next time a run is able to push.
 - **A run publishes all of its mods or none of them.** Everything is resolved and validated before
   anything is written. Where a later failure is unavoidable — a network drop mid-push — the report
   states exactly which mods reached the remote.
@@ -103,6 +105,10 @@ pa-mod-build publish [options]
 
 Every option is also readable from a `PAMB_`-prefixed environment variable. A flag beats the
 variable, which beats the default.
+
+`--config` is resolved relative to `--repo` and may point outside it. That is deliberate — a config
+can be kept apart from the repository it describes, which is how the same mod can be built more than
+one way — and it is the only path the command reads that the repository does not control.
 
 There is deliberately **no `--target`**. The publish branch belongs to the mod, not to the
 invocation, so it lives in `.modbuild` where an author can see it.

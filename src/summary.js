@@ -35,7 +35,16 @@ function renderMod (mod, report) {
     lines.push(`> ⚠ **Warning.** ${warning}`, '')
   }
 
-  if (mod.unchanged) {
+  if (mod.unchanged && mod.pushed) {
+    // Unchanged locally but the remote did not have it: an earlier --no-push run, or one whose
+    // push never completed. Saying "nothing to publish" here would be a lie about what just
+    // reached the remote.
+    lines.push(
+      `**no new commit was needed**, but \`${mod.target}\` had not reached \`${report.remote}\` — ` +
+      `pushed \`${short(mod.head)}\`. Payload: ${count(mod.fileCount)}, ${formatBytes(mod.totalBytes)}.`,
+      ''
+    )
+  } else if (mod.unchanged) {
     lines.push('**no changes — nothing to publish.** The payload is identical to what is already on the branch.', '')
   } else if (report.dryRun) {
     lines.push(

@@ -3,17 +3,22 @@ import { execFile } from 'node:child_process'
 const MAX_BUFFER = 256 * 1024 * 1024
 
 export class GitError extends Error {
-  constructor (message, { command, stderr, code }) {
+  // `subcommand` and `remote` are carried as fields rather than left to be recovered from
+  // `command`: that string is built by joining an argument array, and picking it back apart would
+  // guess wrong the moment an argument contained a space.
+  constructor (message, { command, subcommand, remote, stderr, code }) {
     super(message)
     this.name = 'GitError'
     this.command = command
+    this.subcommand = subcommand
+    this.remote = remote
     this.stderr = stderr
     this.code = code
   }
 }
 
 export function createGit (repoPath) {
-  function run (args, { stdin = null, env = {}, allowFailure = false } = {}) {
+  function run (args, { stdin = null, env = {}, allowFailure = false, remote = null } = {}) {
     return new Promise((resolve, reject) => {
       const child = execFile(
         'git',
@@ -23,7 +28,13 @@ export function createGit (repoPath) {
           if (error && !allowFailure) {
             reject(new GitError(
               `git ${args[0]} failed: ${(stderr || error.message).trim()}`,
-              { command: `git ${args.join(' ')}`, stderr: stderr ?? '', code: error.code ?? 1 }
+              {
+                command: `git ${args.join(' ')}`,
+                subcommand: args[0],
+                remote,
+                stderr: stderr ?? '',
+                code: error.code ?? 1
+              }
             ))
             return
           }
@@ -168,16 +179,19 @@ export function createGit (repoPath) {
     // throw GitError like any other command, rather than being folded into "false" and
     // misread by the caller as "no branch yet, start an orphan".
     async fetchBranch (remote, branch) {
-      const { stdout } = await run(['ls-remote', '--heads', remote, branch])
+      const { stdout } = await run(['ls-remote', '--heads', remote, branch], { remote })
       if (stdout.trim() === '') return false
 
       // Keep the + refspec so a rewound remote branch still force-updates the local tracking ref.
-      await run(['fetch', '--no-tags', '--quiet', remote, `+refs/heads/${branch}:refs/remotes/${remote}/${branch}`])
+      await run(
+        ['fetch', '--no-tags', '--quiet', remote, `+refs/heads/${branch}:refs/remotes/${remote}/${branch}`],
+        { remote }
+      )
       return true
     },
 
     async push (remote, sha, branch) {
-      await run(['push', remote, `${sha}:refs/heads/${branch}`])
+      await run(['push', remote, `${sha}:refs/heads/${branch}`], { remote })
     }
   }
 }

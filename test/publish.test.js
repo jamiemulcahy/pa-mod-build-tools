@@ -377,6 +377,49 @@ test('publishing pushes to origin and reports it', async (t) => {
   assert.equal(pushed.stdout.trim(), report.mods[0].commit)
 })
 
+// The regression this guards: pushing used to be keyed off whether *this* run created a commit.
+// A branch created by an earlier --no-push run therefore existed only locally, and every later
+// run found the tree unchanged, made no commit, and skipped the push — leaving the remote empty
+// forever while the report cheerfully said there was nothing to publish.
+test('a branch that exists only locally is pushed by the next run that can push', async (t) => {
+  const repo = await makeRepo({ '.modbuild': modbuild({ root: 'Mod' }), 'Mod/modinfo.json': '{}' })
+  const remote = await makeBareRemote()
+  t.after(async () => {
+    await repo.cleanup()
+    await remote.cleanup()
+  })
+  await repo.git('remote', 'add', 'origin', remote.dir)
+
+  const first = await publish({ repoPath: repo.dir, push: false })
+  assert.equal(first.mods[0].pushed, false)
+  await assert.rejects(() => remote.git('rev-parse', 'refs/heads/published-mod'))
+
+  const second = await publish({ repoPath: repo.dir })
+
+  assert.equal(second.mods[0].unchanged, true, 'no new commit was needed')
+  assert.equal(second.mods[0].commit, null)
+  assert.equal(second.mods[0].pushed, true, 'but it still had to reach the remote')
+
+  const pushed = await remote.git('rev-parse', 'refs/heads/published-mod')
+  assert.equal(pushed.stdout.trim(), first.mods[0].commit)
+})
+
+test('a run whose payload the remote already holds pushes nothing', async (t) => {
+  const repo = await makeRepo({ '.modbuild': modbuild({ root: 'Mod' }), 'Mod/modinfo.json': '{}' })
+  const remote = await makeBareRemote()
+  t.after(async () => {
+    await repo.cleanup()
+    await remote.cleanup()
+  })
+  await repo.git('remote', 'add', 'origin', remote.dir)
+
+  await publish({ repoPath: repo.dir })
+  const second = await publish({ repoPath: repo.dir })
+
+  assert.equal(second.mods[0].unchanged, true)
+  assert.equal(second.mods[0].pushed, false, 'the remote already has it')
+})
+
 test('with no remote the run commits and reports that nothing was pushed', async (t) => {
   const repo = await makeRepo({ '.modbuild': modbuild({ root: 'Mod' }), 'Mod/modinfo.json': '{}' })
   t.after(() => repo.cleanup())

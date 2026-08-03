@@ -83,7 +83,9 @@ export async function publish ({
 
   const sizes = await git.blobSizes(resolved.flatMap(({ payload }) => payload.included.map((file) => file.sha)))
   const remote = (await git.hasRemote('origin')) ? 'origin' : null
-  const identity = env.GITHUB_ACTIONS ? ACTIONS_IDENTITY : null
+  // Compared against the string rather than tested for truthiness: Actions sets this to "true",
+  // and a literal "false" elsewhere must not select the bot identity.
+  const identity = env.GITHUB_ACTIONS === 'true' ? ACTIONS_IDENTITY : null
 
   // Whether this run will actually push decides how a failed fetch is treated below.
   const willPush = push && remote !== null && !dryRun
@@ -114,8 +116,13 @@ export async function publish ({
 
     if (willPush) {
       for (const modReport of report.mods) {
-        if (modReport.commit === null) continue
-        await git.push(remote, modReport.commit, modReport.target)
+        // Push when the remote does not already hold what the branch now points at. Keying this
+        // off `commit` instead would strand a branch that exists only locally — created by an
+        // earlier --no-push run, or by a run whose push failed — because every later run finds
+        // the tree unchanged, makes no commit, and would skip it forever while the remote has
+        // nothing. PA would then be pointed at a branch that does not exist.
+        if (modReport.head === null || modReport.head === modReport.remoteTip) continue
+        await git.push(remote, modReport.head, modReport.target)
         modReport.pushed = true
       }
     }
@@ -130,6 +137,9 @@ export async function publish ({
 // Builds the tree and, when there is a change, creates the commit and moves the local branch ref.
 // Pushing is deliberately not this function's job — see the comment in publish() above.
 async function commitMod ({ git, mod, payload, sizes, sourceSha, remote, identity, dryRun, willPush }) {
+  // A payload entry with no blob size is a gitlink — a submodule, recorded as a commit sha this
+  // repository does not contain. It carries no bytes of its own, so 0 is the honest figure rather
+  // than a swallowed lookup failure.
   const included = payload.included.map((file) => ({ path: file.path, bytes: sizes.get(file.sha) ?? 0 }))
   const result = {
     root: mod.root,
@@ -142,12 +152,17 @@ async function commitMod ({ git, mod, payload, sizes, sourceSha, remote, identit
     unchanged: false,
     created: false,
     commit: null,
+    // Where the target branch ends up locally, and what the remote already holds. Pushing is
+    // decided by comparing the two — never by whether this run happened to create a commit.
+    head: null,
+    remoteTip: null,
     pushed: false,
     remoteUnreachable: false
   }
 
-  const { tip, remoteUnreachable } = await resolveTarget(git, mod.target, remote, !willPush)
+  const { tip, remoteTip, remoteUnreachable } = await resolveTarget(git, mod.target, remote, !willPush)
   result.remoteUnreachable = remoteUnreachable
+  result.remoteTip = remoteTip
   result.created = tip === null
 
   // Deliberately in the OS temp directory, not inside .git: in a git worktree ".git" is a file,
@@ -169,6 +184,10 @@ async function commitMod ({ git, mod, payload, sizes, sourceSha, remote, identit
 
   if (tip !== null && (await git.treeOf(tip)) === tree) {
     result.unchanged = true
+    // No new commit is needed, but the branch may still be ahead of the remote — it exists only
+    // locally, or an earlier run committed it and never got as far as pushing. Recording where it
+    // points lets the push phase notice that and put it right.
+    result.head = tip
     return result
   }
 
@@ -181,6 +200,7 @@ async function commitMod ({ git, mod, payload, sizes, sourceSha, remote, identit
   })
   await git.updateRef(`refs/heads/${mod.target}`, commit)
   result.commit = commit
+  result.head = commit
   return result
 }
 
@@ -195,11 +215,12 @@ async function commitMod ({ git, mod, payload, sizes, sourceSha, remote, identit
 // are for.
 async function resolveTarget (git, target, remote, toleratesFetchFailure) {
   let remoteUnreachable = false
+  let remoteTip = null
 
   if (remote !== null) {
     try {
       if (await git.fetchBranch(remote, target)) {
-        return { tip: await git.revParse(`refs/remotes/${remote}/${target}`), remoteUnreachable }
+        remoteTip = await git.revParse(`refs/remotes/${remote}/${target}`)
       }
     } catch (cause) {
       if (!toleratesFetchFailure) throw cause
@@ -207,10 +228,12 @@ async function resolveTarget (git, target, remote, toleratesFetchFailure) {
     }
   }
 
+  if (remoteTip !== null) return { tip: remoteTip, remoteTip, remoteUnreachable }
+
   if (await git.refExists(`refs/heads/${target}`)) {
-    return { tip: await git.revParse(`refs/heads/${target}`), remoteUnreachable }
+    return { tip: await git.revParse(`refs/heads/${target}`), remoteTip, remoteUnreachable }
   }
-  return { tip: null, remoteUnreachable }
+  return { tip: null, remoteTip, remoteUnreachable }
 }
 
 function assertUsablePayload (payload, mod, files, configPath) {
