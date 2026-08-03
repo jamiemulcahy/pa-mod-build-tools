@@ -117,6 +117,28 @@ test('duplicate targets are rejected, naming both mods and the target', () => {
   )
 })
 
+test('a target nested inside another target is rejected, naming both mods', () => {
+  assertConfigError(
+    () => parse({ mods: [{ root: 'a', target: 'mod' }, { root: 'b', target: 'mod/a' }] }),
+    'mod/a',
+    'a',
+    'b',
+    'branch'
+  )
+  // The order the two are declared in must not matter.
+  assertConfigError(
+    () => parse({ mods: [{ root: 'a', target: 'mod/a' }, { root: 'b', target: 'mod' }] }),
+    'mod/a',
+    'a',
+    'b'
+  )
+})
+
+test('targets that merely share a prefix without nesting are allowed', () => {
+  const mods = parse({ mods: [{ root: 'a', target: 'mod' }, { root: 'b', target: 'modular' }] })
+  assert.deepEqual(mods.map((mod) => mod.target), ['mod', 'modular'])
+})
+
 test('field types are checked', () => {
   assertConfigError(() => parse({ root: 42 }), 'root', 'string')
   assertConfigError(() => parse({ ignore: '*.psd' }), 'ignore', 'array')

@@ -239,9 +239,29 @@ function assertUniqueTargets (mods, filePath) {
         filePath
       )
     }
+
+    // Distinct names are not enough: git stores a branch as a file under refs/heads, so
+    // "mod" and "mod/a" cannot both exist — one of them would have to be a file and a
+    // directory at once. Caught here, before anything is written, because a run must publish
+    // all of its mods or none, and phase 1 moves refs one mod at a time.
+    for (const [target, root] of seen) {
+      if (!isRefPrefix(target, mod.target) && !isRefPrefix(mod.target, target)) continue
+      const [outer, inner] = isRefPrefix(target, mod.target) ? [target, mod.target] : [mod.target, target]
+      throw new ConfigError(
+        `${filePath}: the mod rooted at "${root}" publishes to "${target}" and the mod rooted at ` +
+        `"${mod.root}" publishes to "${mod.target}". Git cannot hold both branches at once, ` +
+        `because "${outer}" would have to be a branch and a folder of branches at the same time ` +
+        `to also hold "${inner}". Rename one of them.`,
+        filePath
+      )
+    }
+
     seen.set(mod.target, mod.root)
   }
 }
+
+// True when `outer` is a path prefix of `inner` — "mod" of "mod/a", but not of "modular".
+const isRefPrefix = (outer, inner) => inner.startsWith(`${outer}/`)
 
 function quoteList (values) {
   return values.map((value) => `"${value}"`).join(', ')

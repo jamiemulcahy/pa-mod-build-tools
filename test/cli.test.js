@@ -175,18 +175,19 @@ test('a partial multi-mod failure renders the partial report and keeps the error
   const remote = await makeBareRemote()
   t.after(() => remote.cleanup())
 
-  // Two mods, published in this order. The second mod's target branch name
-  // ("published-mod-a/sub") lives inside the ref namespace of the first mod's target
-  // ("published-mod-a"), which git's ref store cannot represent simultaneously — a ref cannot be
-  // both a leaf and a directory. Mod A's local ref is created first (phase 1 processes mods in
-  // order), so mod B's own local ref update then fails deterministically with a ref-lock
-  // conflict, part way through a multi-mod run and before any push is attempted — a genuine
-  // partial failure with no reliance on timing or environment tricks.
+  // Two mods, published in this order. An unrelated branch "published-mod-b/old" already exists
+  // in the repository, and git's ref store cannot represent that alongside a branch literally
+  // named "published-mod-b" — a ref cannot be both a leaf and a directory. Mod A's ref is
+  // created first (phase 1 processes mods in order), so mod B's ref update then fails
+  // deterministically with a ref-lock conflict, part way through a multi-mod run and before any
+  // push is attempted — a genuine partial failure with no reliance on timing or environment
+  // tricks. The conflict comes from a pre-existing branch rather than from the two targets
+  // themselves because config.js now rejects targets that nest inside one another up front.
   const repo = await makeRepo({
     '.modbuild': JSON.stringify({
       mods: [
         { root: 'ModA', target: 'published-mod-a' },
-        { root: 'ModB', target: 'published-mod-a/sub' }
+        { root: 'ModB', target: 'published-mod-b' }
       ]
     }),
     'ModA/modinfo.json': '{"version":"1.0.0"}',
@@ -194,6 +195,7 @@ test('a partial multi-mod failure renders the partial report and keeps the error
   })
   t.after(() => repo.cleanup())
 
+  await repo.git('branch', 'published-mod-b/old', 'main')
   await repo.git('remote', 'add', 'origin', remote.dir)
 
   const result = await runCli(['publish'], { cwd: repo.dir, env: { PAMB_PUSH: 'true' } })
