@@ -33,10 +33,10 @@ jobs:
       run:
         shell: bash
 
+    # The `runner` context is not available to job-level env — only at step level — so the
+    # summary paths are written out where they are used, against $RUNNER_TEMP.
     env:
       E2E: node _action/scripts/action-e2e.js
-      DRY_RUN_SUMMARY: ${{ runner.temp }}/summary-dry-run.md
-      PUBLISH_SUMMARY: ${{ runner.temp }}/summary-publish.md
 
     steps:
       - name: Check out the action
@@ -56,18 +56,18 @@ jobs:
         with:
           dry-run: 'true'
         env:
-          GITHUB_STEP_SUMMARY: ${{ env.DRY_RUN_SUMMARY }}
+          GITHUB_STEP_SUMMARY: ${{ runner.temp }}/summary-dry-run.md
 
       - name: A dry run writes and pushes nothing
-        run: $E2E check dry-run "$DRY_RUN_SUMMARY"
+        run: $E2E check dry-run "$RUNNER_TEMP/summary-dry-run.md"
 
       - name: Publish
         uses: ./_action
         env:
-          GITHUB_STEP_SUMMARY: ${{ env.PUBLISH_SUMMARY }}
+          GITHUB_STEP_SUMMARY: ${{ runner.temp }}/summary-publish.md
 
       - name: The report says what was published and what was left out
-        run: $E2E check summary "$PUBLISH_SUMMARY"
+        run: $E2E check summary "$RUNNER_TEMP/summary-publish.md"
 
       - name: The branch holds the payload, with the root prefix stripped
         run: $E2E check published
