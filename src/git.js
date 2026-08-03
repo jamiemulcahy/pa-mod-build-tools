@@ -30,7 +30,15 @@ export function createGit (repoPath) {
           resolve({ stdout, stderr, code: error ? (error.code ?? 1) : 0 })
         }
       )
-      if (stdin !== null) child.stdin.end(stdin)
+      if (stdin !== null) {
+        // Swallowing the write error is deliberate, not laziness. If git exits before draining
+        // stdin, the EPIPE arrives as an unhandled 'error' event, which kills the process
+        // outright and leaves this promise unsettled — bypassing even the partial-report path.
+        // The execFile callback above reports the real failure, which is git's exit status and
+        // its stderr, not the broken pipe that followed from it.
+        child.stdin.on('error', () => {})
+        child.stdin.end(stdin)
+      }
     })
   }
 

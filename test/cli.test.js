@@ -6,7 +6,7 @@ import { promisify } from 'node:util'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { makeRepo } from './helpers/repo.js'
+import { makeRepo, makeBareRemote } from './helpers/repo.js'
 
 const run = promisify(execFile)
 // fileURLToPath, not URL.pathname: the latter yields "/C:/..." on Windows and percent-encodes
@@ -163,6 +163,30 @@ test('--help exits 0 and documents every option', async () => {
   }
 })
 
+// Every other test here sets PAMB_PUSH=false in the environment, so the flag itself is otherwise
+// never exercised — and parseArgs treats a "--no-" prefix specially on newer Node, which could
+// quietly change what this flag means.
+test('--no-push as a flag commits locally and pushes nothing', async (t) => {
+  const repo = await makeRepo({ '.modbuild': JSON.stringify({ root: 'Mod' }), 'Mod/modinfo.json': '{}' })
+  const remote = await makeBareRemote()
+  t.after(async () => {
+    await repo.cleanup()
+    await remote.cleanup()
+  })
+  await repo.git('remote', 'add', 'origin', remote.dir)
+
+  // PAMB_PUSH=true, so only the flag can stop the push.
+  const result = await runCli(['publish', '--no-push'], { cwd: repo.dir, env: { PAMB_PUSH: 'true' } })
+
+  assert.equal(result.code, 0, result.stderr)
+  assert.match(result.stdout, /not pushed/)
+  await repo.git('rev-parse', '--verify', 'refs/heads/published-mod')
+  await assert.rejects(
+    () => remote.git('rev-parse', '--verify', 'refs/heads/published-mod'),
+    'nothing may reach the remote'
+  )
+})
+
 test('a git failure is reported as a message, never as a stack trace', async (t) => {
   const repo = await makeRepo({ '.modbuild': JSON.stringify({ root: 'Mod' }), 'Mod/modinfo.json': '{}' })
   t.after(() => repo.cleanup())
@@ -183,7 +207,6 @@ test('a git failure is reported as a message, never as a stack trace', async (t)
 })
 
 test('a partial multi-mod failure renders the partial report and keeps the error on stderr', async (t) => {
-  const { makeBareRemote } = await import('./helpers/repo.js')
   const remote = await makeBareRemote()
   t.after(() => remote.cleanup())
 

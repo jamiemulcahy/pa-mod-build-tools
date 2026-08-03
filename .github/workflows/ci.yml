@@ -6,6 +6,10 @@ on:
   push:
     branches: [main]
 
+# Running the test suite needs nothing but the checkout.
+permissions:
+  contents: read
+
 jobs:
   test:
     strategy:
