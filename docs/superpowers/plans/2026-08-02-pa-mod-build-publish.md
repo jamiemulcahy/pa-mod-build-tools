@@ -1346,7 +1346,9 @@ export function createGit (repoPath) {
 
     async refBranchName (ref) {
       const { code, stdout } = await run(
-        ['rev-parse', '--symbolic-full-name', '--end-of-options', ref],
+        // No --end-of-options here: combined with --symbolic-full-name, git echoes the flag back
+        // as a literal output line, so the branch name never parses. Verified on git 2.38.1.
+        ['rev-parse', '--symbolic-full-name', ref],
         { allowFailure: true }
       )
       if (code !== 0) return null
