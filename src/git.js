@@ -22,7 +22,7 @@ export function createGit (repoPath) {
         (error, stdout, stderr) => {
           if (error && !allowFailure) {
             reject(new GitError(
-              `git ${args[2] ?? args[0]} failed: ${(stderr || error.message).trim()}`,
+              `git ${args[0]} failed: ${(stderr || error.message).trim()}`,
               { command: `git ${args.join(' ')}`, stderr: stderr ?? '', code: error.code ?? 1 }
             ))
             return
@@ -54,14 +54,18 @@ export function createGit (repoPath) {
     },
 
     async refBranchName (ref) {
-      // No --end-of-options here: combined with --symbolic-full-name, git echoes the flag
-      // itself back as an extra output line instead of consuming it, which corrupts parsing.
+      // --symbolic-full-name combined with --end-of-options makes git echo the flag itself
+      // back as an extra leading output line instead of consuming it, so the real answer (if
+      // any) is always the last non-empty line. Reading the last line makes this correct
+      // whether or not that echo happens, which keeps --end-of-options here for consistency
+      // with every other rev-parse call in this file instead of dropping it as a special case.
       const { code, stdout } = await run(
-        ['rev-parse', '--symbolic-full-name', ref],
+        ['rev-parse', '--symbolic-full-name', '--end-of-options', ref],
         { allowFailure: true }
       )
       if (code !== 0) return null
-      const full = stdout.trim()
+      const lines = stdout.split('\n').map((line) => line.trim()).filter(Boolean)
+      const full = lines[lines.length - 1] ?? ''
       return full.startsWith('refs/heads/') ? full.slice('refs/heads/'.length) : null
     },
 
@@ -146,14 +150,17 @@ export function createGit (repoPath) {
       return stdout.split('\n').map((line) => line.trim()).includes(name)
     },
 
-    // Fetches just this branch, shallow-friendly. Returns false when the remote has no such
-    // branch, which is the first-publish case rather than an error.
+    // Returns false only when the remote genuinely has no such branch (the first-publish
+    // case). A real failure to reach the remote (network, auth, misconfigured URL) is left to
+    // throw GitError like any other command, rather than being folded into "false" and
+    // misread by the caller as "no branch yet, start an orphan".
     async fetchBranch (remote, branch) {
-      const { code } = await run(
-        ['fetch', '--no-tags', '--quiet', remote, `+refs/heads/${branch}:refs/remotes/${remote}/${branch}`],
-        { allowFailure: true }
-      )
-      return code === 0
+      const { stdout } = await run(['ls-remote', '--heads', remote, branch])
+      if (stdout.trim() === '') return false
+
+      // Keep the + refspec so a rewound remote branch still force-updates the local tracking ref.
+      await run(['fetch', '--no-tags', '--quiet', remote, `+refs/heads/${branch}:refs/remotes/${remote}/${branch}`])
+      return true
     },
 
     async push (remote, sha, branch) {

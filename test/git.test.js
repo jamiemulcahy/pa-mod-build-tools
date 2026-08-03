@@ -171,6 +171,15 @@ test('hasRemote, fetchBranch and push move a ref to a remote', async (t) => {
   assert.equal(await git.fetchBranch('origin', 'published-mod'), true)
 })
 
+test('fetchBranch throws rather than returning false when the remote itself is unreachable', async (t) => {
+  const repo = await makeRepo({ 'a.js': 'a' })
+  t.after(() => repo.cleanup())
+  const git = createGit(repo.dir)
+
+  await repo.git('remote', 'add', 'broken', path.join(repo.dir, 'does-not-exist'))
+  await assert.rejects(() => git.fetchBranch('broken', 'published-mod'), GitError)
+})
+
 test('GitError carries the command and stderr', async (t) => {
   const repo = await makeRepo({ 'a.js': 'a' })
   t.after(() => repo.cleanup())
@@ -182,4 +191,18 @@ test('GitError carries the command and stderr', async (t) => {
   assert.ok(error instanceof GitError)
   assert.ok(error.command.includes('rev-parse'))
   assert.equal(typeof error.stderr, 'string')
+})
+
+test('GitError message names the actual git subcommand, not an arbitrary argument', async (t) => {
+  const repo = await makeRepo({ 'a.js': 'a' })
+  t.after(() => repo.cleanup())
+  const git = createGit(repo.dir)
+
+  const nonexistentSha = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef'
+  const error = await git.updateRef('refs/heads/bad', nonexistentSha).then(
+    () => null,
+    (caught) => caught
+  )
+  assert.ok(error instanceof GitError)
+  assert.match(error.message, /^git update-ref failed:/)
 })
