@@ -70,11 +70,11 @@ async function main () {
   }
 
   const options = {
-    repoPath: parsed.values.repo ?? process.env.PAMB_REPO ?? process.cwd(),
-    configPath: parsed.values.config ?? process.env.PAMB_CONFIG ?? '.modbuild',
-    source: parsed.values.source ?? process.env.PAMB_SOURCE ?? 'HEAD',
-    dryRun: parsed.values['dry-run'] ?? isTrue(process.env.PAMB_DRY_RUN),
-    push: parsed.values['no-push'] ? false : !isFalse(process.env.PAMB_PUSH)
+    repoPath: parsed.values.repo ?? fromEnv('PAMB_REPO') ?? process.cwd(),
+    configPath: parsed.values.config ?? fromEnv('PAMB_CONFIG') ?? '.modbuild',
+    source: parsed.values.source ?? fromEnv('PAMB_SOURCE') ?? 'HEAD',
+    dryRun: parsed.values['dry-run'] ?? isTrue(fromEnv('PAMB_DRY_RUN')),
+    push: parsed.values['no-push'] ? false : !isFalse(fromEnv('PAMB_PUSH'))
   }
 
   let report
@@ -122,9 +122,19 @@ function fail (message) {
   process.exitCode = 1
 }
 
+// An empty variable counts as unset. GitHub Actions expressions collapse to an empty string
+// rather than to nothing, so an input the caller never supplied still arrives here as
+// PAMB_CONFIG="" — and reading that as a real value would send the tool looking for a config
+// file at "". Whoever set an empty variable meant "I have nothing to say about this", wherever
+// they set it from.
+function fromEnv (name) {
+  const value = process.env[name]
+  return value === undefined || value === '' ? undefined : value
+}
+
 // Function declarations, not `const` arrow functions: main() runs synchronously (it does not hit
 // its first `await` until `publish(options)`) as a direct result of `main().catch(...)` below, so
-// by the time it builds `options` these two must already be usable. `const` bindings stay in the
+// by the time it builds `options` these three must already be usable. `const` bindings stay in the
 // temporal dead zone until their own declaration executes, which is after main() has already run
 // — function declarations are hoisted in full, so they are callable from anywhere in the module.
 function isTrue (value) { return value === 'true' || value === '1' }

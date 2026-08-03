@@ -1,0 +1,112 @@
+# .github/workflows/action.yml
+#
+# The action's end-to-end test. test/action.test.js checks what action.yml says; this checks
+# what it does, by running it against fixture repositories built on the runner.
+#
+# The fixture repository has to *be* the workspace, because a composite action runs there and a
+# `uses:` step cannot be pointed anywhere else. So this project is checked out to _action and
+# scripts/action-e2e.js builds a repository around it, with a bare repository in RUNNER_TEMP
+# standing in for the remote. Nothing here touches the network, needs a credential, or pushes a
+# branch to this repository.
+name: Action
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# The action under test pushes only to a file:// remote on the runner.
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows because `shell: bash` there is git-bash rather than a POSIX shell, and path
+        # handling is where a composite action quietly breaks.
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      E2E: node _action/scripts/action-e2e.js
+      DRY_RUN_SUMMARY: ${{ runner.temp }}/summary-dry-run.md
+      PUBLISH_SUMMARY: ${{ runner.temp }}/summary-publish.md
+
+    steps:
+      - name: Check out the action
+        uses: actions/checkout@v4
+        with:
+          path: _action
+
+      # Deliberately no fetch-depth, token or setup-node anywhere in this job: what a mod
+      # author writes is what gets tested.
+      - name: Build the single-mod fixture
+        run: $E2E setup single
+
+      # GITHUB_STEP_SUMMARY is redirected here so the report can be read back and asserted. The
+      # later publish steps leave it alone, so a real summary still renders on the run page.
+      - name: Publish (dry run)
+        uses: ./_action
+        with:
+          dry-run: 'true'
+        env:
+          GITHUB_STEP_SUMMARY: ${{ env.DRY_RUN_SUMMARY }}
+
+      - name: A dry run writes and pushes nothing
+        run: $E2E check dry-run "$DRY_RUN_SUMMARY"
+
+      - name: Publish
+        uses: ./_action
+        env:
+          GITHUB_STEP_SUMMARY: ${{ env.PUBLISH_SUMMARY }}
+
+      - name: The report says what was published and what was left out
+        run: $E2E check summary "$PUBLISH_SUMMARY"
+
+      - name: The branch holds the payload, with the root prefix stripped
+        run: $E2E check published
+
+      - name: Publish again with nothing changed
+        uses: ./_action
+
+      - name: An unchanged run makes no commit
+        run: $E2E check unchanged
+
+      - name: A later push to the source branch
+        run: $E2E advance
+
+      - name: Publish the change
+        uses: ./_action
+
+      - name: History accumulates rather than being force-pushed over
+        run: $E2E check second-publish
+
+      - name: Build the multi-mod fixture
+        run: $E2E setup multi
+
+      - name: Publish every mod from one step
+        uses: ./_action
+
+      - name: Both mods reached their own branches
+        run: $E2E check multi
+
+      - name: Build the fixture for the config and source inputs
+        run: $E2E setup inputs
+
+      # There is no .modbuild at the default path in this fixture, so a run that ignored
+      # `config` fails outright, and `source` is an earlier commit whose payload is missing a
+      # file the tip has. Neither input can appear to work without actually working.
+      - name: Publish an earlier commit, using a config kept elsewhere
+        uses: ./_action
+        with:
+          config: build/mod.json
+          source: previous
+
+      - name: Both inputs took effect
+        run: $E2E check inputs

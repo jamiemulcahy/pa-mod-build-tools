@@ -93,6 +93,23 @@ test('PAMB_DRY_RUN has the same effect as the flag', async (t) => {
   await assert.rejects(() => repo.git('rev-parse', '--verify', 'refs/heads/published-mod'))
 })
 
+// GitHub Actions expressions collapse to an empty string rather than to nothing, so an input
+// nobody supplied still arrives as PAMB_CONFIG="". Reading that as a real value would send the
+// tool looking for a config file at "" and fail a run that should have used its default.
+test('an empty environment variable counts as unset', async (t) => {
+  const repo = await makeRepo({ '.modbuild': JSON.stringify({ root: 'Mod' }), 'Mod/modinfo.json': '{}' })
+  t.after(() => repo.cleanup())
+
+  const result = await runCli(['publish'], {
+    cwd: repo.dir,
+    env: { PAMB_CONFIG: '', PAMB_SOURCE: '', PAMB_REPO: '', PAMB_DRY_RUN: '' }
+  })
+
+  assert.equal(result.code, 0, result.stderr)
+  assert.match(result.stdout, /published-mod/)
+  assert.doesNotMatch(result.stdout, /dry run/i)
+})
+
 test('a flag beats the environment variable', async (t) => {
   const repo = await makeRepo({
     '.modbuild': JSON.stringify({ root: 'Mod' }),

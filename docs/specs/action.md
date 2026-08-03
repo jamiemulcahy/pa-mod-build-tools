@@ -72,6 +72,12 @@ whatever the author asked `actions/checkout` for, which is right by construction
 trigger there is. An author who wants something else names it, and then it is their explicit
 choice rather than a default quietly disagreeing with them.
 
+Setting `source` to anything other than the default carries a condition that is easy to miss:
+a default `actions/checkout` fetches one branch, so any other ref has to be brought in
+deliberately — `actions/checkout` with a matching `ref`, or a greater `fetch-depth`. The
+command reports an unresolvable ref plainly, so the failure is obvious rather than subtle, but
+it is a failure at the step rather than something the action can paper over.
+
 ### What is deliberately not an input
 
 Each of these was considered and rejected. They are listed because the reason matters more
@@ -212,9 +218,12 @@ then builds a fixture repository around it:
    `_action` stays untracked, which is invisible to `publish` — it only ever reads tracked
    files from the source commit.
 
-Fixture setup and assertions live in a Node script, `test/action/e2e.js`, invoked with a
+Fixture setup and assertions live in a Node script, `scripts/action-e2e.js`, invoked with a
 scenario or check name. Written in Node rather than shell because it has to run identically on
 both runners, and because a wrong assertion that silently passes is worse than no assertion.
+It sits in `scripts/` rather than `test/` for a dull reason worth recording: `node --test`
+treats every file under a test directory as a test file, and would run this one with no
+arguments on every `npm test`.
 
 Covered:
 

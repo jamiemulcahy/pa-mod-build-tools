@@ -24,5 +24,8 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/jamiemulcahy/pa-mod-build-tools.git"
+  },
+  "devDependencies": {
+    "yaml": "^2.9.0"
   }
 }
