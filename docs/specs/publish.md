@@ -104,7 +104,13 @@ pa-mod-build publish [options]
 ```
 
 Every option is also readable from a `PAMB_`-prefixed environment variable. A flag beats the
-variable, which beats the default.
+variable, which beats the default. An empty variable counts as unset, because a caller that
+builds one from a template or a GitHub Actions expression gets an empty string where it meant
+to say nothing at all.
+
+The yes-or-no variables — `PAMB_DRY_RUN` and `PAMB_PUSH` — accept `true`, `false`, `1` and `0`,
+and stop the run on anything else. Reading an unrecognised value as "no" would publish a branch
+someone had just written `PAMB_DRY_RUN=yes` to protect, and report it as a success.
 
 `--config` is resolved relative to `--repo` and may point outside it. That is deliberate — a config
 can be kept apart from the repository it describes, which is how the same mod can be built more than

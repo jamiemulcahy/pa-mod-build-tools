@@ -69,12 +69,11 @@ async function main () {
     )
   }
 
-  const options = {
-    repoPath: parsed.values.repo ?? process.env.PAMB_REPO ?? process.cwd(),
-    configPath: parsed.values.config ?? process.env.PAMB_CONFIG ?? '.modbuild',
-    source: parsed.values.source ?? process.env.PAMB_SOURCE ?? 'HEAD',
-    dryRun: parsed.values['dry-run'] ?? isTrue(process.env.PAMB_DRY_RUN),
-    push: parsed.values['no-push'] ? false : !isFalse(process.env.PAMB_PUSH)
+  let options
+  try {
+    options = resolveOptions(parsed.values)
+  } catch (error) {
+    return fail(error.message)
   }
 
   let report
@@ -122,10 +121,46 @@ function fail (message) {
   process.exitCode = 1
 }
 
-// Function declarations, not `const` arrow functions: main() runs synchronously (it does not hit
-// its first `await` until `publish(options)`) as a direct result of `main().catch(...)` below, so
-// by the time it builds `options` these two must already be usable. `const` bindings stay in the
-// temporal dead zone until their own declaration executes, which is after main() has already run
-// — function declarations are hoisted in full, so they are callable from anywhere in the module.
-function isTrue (value) { return value === 'true' || value === '1' }
-function isFalse (value) { return value === 'false' || value === '0' }
+// These three are function declarations, not `const` arrow functions, and that is load bearing.
+// main() runs synchronously (it does not reach its first `await` until `publish(options)`) as a
+// direct result of the `main().catch(...)` call above, so by the time it resolves its options
+// they must already be usable. `const` bindings stay in the temporal dead zone until their own
+// declaration executes, which is after main() has already run — function declarations are
+// hoisted in full, so they are callable from anywhere in the module.
+function resolveOptions (values) {
+  return {
+    repoPath: values.repo ?? fromEnv('PAMB_REPO') ?? process.cwd(),
+    configPath: values.config ?? fromEnv('PAMB_CONFIG') ?? '.modbuild',
+    source: values.source ?? fromEnv('PAMB_SOURCE') ?? 'HEAD',
+    dryRun: values['dry-run'] ?? boolFromEnv('PAMB_DRY_RUN') ?? false,
+    push: values['no-push'] ? false : (boolFromEnv('PAMB_PUSH') ?? true)
+  }
+}
+
+// An empty variable counts as unset. GitHub Actions expressions collapse to an empty string
+// rather than to nothing, so an input the caller never supplied still arrives here as
+// PAMB_CONFIG="" — and reading that as a real value would send the tool looking for a config
+// file at "". Whoever set an empty variable meant "I have nothing to say about this", wherever
+// they set it from.
+function fromEnv (name) {
+  const value = process.env[name]
+  return value === undefined || value === '' ? undefined : value
+}
+
+// Anything that is not recognisably true or false stops the run, rather than counting as false.
+// PAMB_DRY_RUN is why: it is the variable someone reaches for when they are nervous about what
+// this tool is about to do, and treating an unrecognised value as "no" would publish a branch
+// they had just asked it not to touch. `dry-run: 'yes'` in a workflow is a plausible thing to
+// write, and it must not quietly perform a real publish reported as a success.
+function boolFromEnv (name) {
+  const value = fromEnv(name)
+  if (value === undefined) return undefined
+  if (value === 'true' || value === '1') return true
+  if (value === 'false' || value === '0') return false
+
+  throw new Error(
+    `${name} is set to "${value}", which is neither true nor false. Use "true" or "false" ` +
+    '("1" and "0" also work). Nothing was published: a value that cannot be read as "false" is ' +
+    'not assumed to be one.'
+  )
+}

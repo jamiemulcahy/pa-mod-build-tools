@@ -2,14 +2,13 @@
 
 Build tools for [Planetary Annihilation](https://www.planetaryannihilation.com/) mod authors.
 
-> **Status: the `publish` command works and is tested**, but there is no way to run it yet
-> without a terminal. The GitHub Action that would let a mod author use this from a
-> `.modbuild` file and a workflow step is not built (milestone 2,
-> [#3](https://github.com/jamiemulcahy/pa-mod-build-tools/issues/3)), and neither are the
-> onboarding docs (milestone 3,
-> [#4](https://github.com/jamiemulcahy/pa-mod-build-tools/issues/4)) or the npm package
-> (milestone 4, [#5](https://github.com/jamiemulcahy/pa-mod-build-tools/issues/5)). See
-> [ROADMAP.md](ROADMAP.md) for the full sequence and the
+> **Status: the `publish` command and the GitHub Action both work and are tested.** What is
+> still missing is the onboarding that makes them adoptable without reading this file closely —
+> a setup guide, a starter `.modbuild`, and click-through links for adding both (milestone 3,
+> [#4](https://github.com/jamiemulcahy/pa-mod-build-tools/issues/4)) — and the npm package
+> (milestone 4, [#5](https://github.com/jamiemulcahy/pa-mod-build-tools/issues/5)). Until this
+> is released, use the action at `@main` rather than `@v1`. See [ROADMAP.md](ROADMAP.md) for
+> the full sequence and the
 > [enhancement issues](https://github.com/jamiemulcahy/pa-mod-build-tools/issues) for detail.
 
 ## The problem
@@ -49,14 +48,31 @@ carrying its own `root`, `ignore` and `target`:
 ] }
 ```
 
-The GitHub Action is not built yet
-([#3](https://github.com/jamiemulcahy/pa-mod-build-tools/issues/3)) — this is what the
-workflow step is expected to look like once it exists, not something you can add today:
+The workflow that runs it is the whole of this:
 
 ```yaml
-# .github/workflows/publish-mod.yml — not built yet
-- uses: jamiemulcahy/pa-mod-build-tools@v1
+# .github/workflows/publish-mod.yml
+name: Publish mod
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jamiemulcahy/pa-mod-build-tools@main
 ```
+
+No fetch depth, no token, no Node setup. The action takes three optional inputs — `source`,
+`config` and `dry-run` — and `dry-run: 'true'` is the safe way to see what a real run would
+publish. [docs/specs/action.md](docs/specs/action.md) covers all of it, including why each of
+those absent lines is absent.
 
 Nothing is excluded unless you say so. There are no hidden defaults — the starter `.modbuild`
 ships with sensible rules already written into it, so every rule is visible in a file you own
@@ -64,8 +80,12 @@ and can edit or delete.
 
 ## Try it
 
-The `publish` command itself works today, though it is not on npm yet, so you need a checkout
-of this repository to run it. From that checkout, point it at your mod's git repository:
+Add the workflow above to your mod's repository with `dry-run: 'true'` set on the action step,
+push, and read the job summary. It reports what would be published and everything that would
+be left out, and writes nothing.
+
+To run the same thing from a terminal instead: the command is not on npm yet, so you need a
+checkout of this repository. From that checkout, point it at your mod's git repository:
 
 ```bash
 npm run publish-mod -- --repo /path/to/your/mod --dry-run
@@ -89,7 +109,8 @@ format, what a run guarantees, and every way it can fail.
 | Ignore syntax | `.gitignore` syntax, including negation, relative to `root` |
 | Which files are considered | Git-tracked files only, so `.gitignore` is honoured for free |
 | Output | A commit on a configurable publish branch. No release artifacts in v1. |
-| Config split | `.modbuild` owns the payload (root, ignore, target); workflow YAML owns plumbing (source, config, token) |
+| Config split | `.modbuild` owns the payload (root, ignore, target); workflow YAML owns plumbing (source, config, dry-run) |
+| Credentials | Whatever `actions/checkout` persisted. The action has no token input of its own. |
 | Packaging | npm package, invoked by a composite action |
 
 See [ROADMAP.md](ROADMAP.md) for how this gets built, and the individual issues for full

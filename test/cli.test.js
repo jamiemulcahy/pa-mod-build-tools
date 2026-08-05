@@ -93,6 +93,66 @@ test('PAMB_DRY_RUN has the same effect as the flag', async (t) => {
   await assert.rejects(() => repo.git('rev-parse', '--verify', 'refs/heads/published-mod'))
 })
 
+// GitHub Actions expressions collapse to an empty string rather than to nothing, so an input
+// nobody supplied still arrives as PAMB_CONFIG="". Reading that as a real value would send the
+// tool looking for a config file at "" and fail a run that should have used its default.
+test('an empty environment variable counts as unset', async (t) => {
+  const repo = await makeRepo({ '.modbuild': JSON.stringify({ root: 'Mod' }), 'Mod/modinfo.json': '{}' })
+  t.after(() => repo.cleanup())
+
+  const result = await runCli(['publish'], {
+    cwd: repo.dir,
+    env: { PAMB_CONFIG: '', PAMB_SOURCE: '', PAMB_REPO: '', PAMB_DRY_RUN: '' }
+  })
+
+  assert.equal(result.code, 0, result.stderr)
+  assert.match(result.stdout, /published-mod/)
+  assert.doesNotMatch(result.stdout, /dry run/i)
+})
+
+// The one that would hurt: someone nervous enough about this tool to reach for a dry run,
+// whose spelling of "yes" is not one of the four accepted words, must not get a real publish
+// reported back to them as a success.
+test('a PAMB_DRY_RUN that is neither true nor false stops the run', async (t) => {
+  const repo = await makeRepo({ '.modbuild': JSON.stringify({ root: 'Mod' }), 'Mod/modinfo.json': '{}' })
+  t.after(() => repo.cleanup())
+
+  const result = await runCli(['publish'], { cwd: repo.dir, env: { PAMB_DRY_RUN: 'yes' } })
+
+  assert.equal(result.code, 1)
+  assert.match(result.stderr, /PAMB_DRY_RUN/)
+  assert.match(result.stderr, /"yes"/)
+  assert.match(result.stderr, /true|false/)
+  await assert.rejects(() => repo.git('rev-parse', '--verify', 'refs/heads/published-mod'))
+})
+
+test('PAMB_PUSH is held to the same standard', async (t) => {
+  const repo = await makeRepo({ '.modbuild': JSON.stringify({ root: 'Mod' }), 'Mod/modinfo.json': '{}' })
+  t.after(() => repo.cleanup())
+
+  const result = await runCli(['publish'], { cwd: repo.dir, env: { PAMB_PUSH: 'nope' } })
+
+  assert.equal(result.code, 1)
+  assert.match(result.stderr, /PAMB_PUSH/)
+  await assert.rejects(() => repo.git('rev-parse', '--verify', 'refs/heads/published-mod'))
+})
+
+test('the four accepted spellings still work', async (t) => {
+  const repo = await makeRepo({ '.modbuild': JSON.stringify({ root: 'Mod' }), 'Mod/modinfo.json': '{}' })
+  t.after(() => repo.cleanup())
+
+  for (const value of ['true', '1']) {
+    const result = await runCli(['publish'], { cwd: repo.dir, env: { PAMB_DRY_RUN: value } })
+    assert.equal(result.code, 0, result.stderr)
+    assert.match(result.stdout, /dry run/i)
+  }
+  for (const value of ['false', '0']) {
+    const result = await runCli(['publish'], { cwd: repo.dir, env: { PAMB_DRY_RUN: value } })
+    assert.equal(result.code, 0, result.stderr)
+    assert.doesNotMatch(result.stdout, /dry run/i)
+  }
+})
+
 test('a flag beats the environment variable', async (t) => {
   const repo = await makeRepo({
     '.modbuild': JSON.stringify({ root: 'Mod' }),

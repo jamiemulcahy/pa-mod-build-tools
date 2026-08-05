@@ -7,7 +7,7 @@ enhancement issue carrying the full agreed detail and its open questions.
 
 Repository, branch ruleset, merge policy, security settings, roadmap, issues.
 
-## 1. `pa-mod-build publish` — [#2](https://github.com/jamiemulcahy/pa-mod-build-tools/issues/2)
+## 1. `pa-mod-build publish` — [#2](https://github.com/jamiemulcahy/pa-mod-build-tools/issues/2) ✅
 
 The whole tool as a command. Reads `.modbuild`, resolves the payload, writes the publish
 branch, reports what it did. Runs from a terminal against a real repo, with no GitHub Actions
@@ -16,7 +16,7 @@ involvement at all.
 The command owns everything. Later milestones only change how it gets invoked and how it is
 distributed — never what it does.
 
-## 2. GitHub Action — [#3](https://github.com/jamiemulcahy/pa-mod-build-tools/issues/3)
+## 2. GitHub Action — [#3](https://github.com/jamiemulcahy/pa-mod-build-tools/issues/3) ✅
 
 A composite `action.yml` that maps action inputs onto the command. Self-contained: it runs
 its own repo's code, so it works before anything is published to a registry.
