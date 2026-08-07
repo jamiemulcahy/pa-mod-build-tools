@@ -97,12 +97,17 @@ lives in one file.
 ## Tests
 
 ```bash
-npm test           # against your own git
-npm run test:docker  # against a pinned git and Node, with no host config in scope
+npm test
 ```
 
-Every test drives the real command against a real repository with a bare repository standing
-in for GitHub, and asserts on what lands on the published branch. Nothing is mocked.
+Every test drives the real command against a real repository, with a bare repository standing
+in for GitHub, and asserts on what lands on the published branch. Nothing is mocked and nothing
+internal is imported, so the tests survive any rewrite of the implementation.
+
+Each test builds its own repository under a fresh temp directory, and runs with the system and
+global git config pointed at paths that do not exist. Whatever you have in your own `.gitconfig`
+— `core.autocrlf`, `commit.gpgsign`, `init.defaultBranch` — cannot reach a suite whose whole
+subject is git's behaviour.
 
 ## Licence
 

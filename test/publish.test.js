@@ -10,16 +10,28 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const CLI = fileURLToPath(new URL('../src/publish.js', import.meta.url))
+const lines = (text) => text.split('\n').filter(Boolean)
 
 // A throwaway mod repository, with a bare repo standing in for GitHub.
 function fixture (files) {
   const dir = mkdtempSync(join(tmpdir(), 'pamb-test-'))
   const work = join(dir, 'work')
   const origin = join(dir, 'origin.git')
-  const git = (...args) => execFileSync('git', args, { cwd: work, encoding: 'utf8' }).trim()
 
-  execFileSync('git', ['init', '-q', '--bare', origin])
-  execFileSync('git', ['init', '-q', '-b', 'main', work])
+  // Whoever runs this has their own git config, and a suite about git's behaviour must not
+  // inherit it — core.autocrlf alone would change what lands in a published tree. Pointing at
+  // paths that do not exist is how you get an empty config on every platform; /dev/null is not.
+  const env = {
+    ...process.env,
+    GIT_CONFIG_GLOBAL: join(dir, 'no-global-config'),
+    GIT_CONFIG_SYSTEM: join(dir, 'no-system-config')
+  }
+  const run = (args, cwd) => execFileSync('git', args, { cwd, env, encoding: 'utf8' }).trim()
+  const git = (...args) => run(args, work)
+  const inOrigin = (...args) => run(['-C', origin, ...args], dir)
+
+  run(['init', '-q', '--bare', origin], dir)
+  run(['init', '-q', '-b', 'main', work], dir)
   git('config', 'user.email', 'mod@author.test')
   git('config', 'user.name', 'Mod Author')
   git('remote', 'add', 'origin', origin)
@@ -37,17 +49,14 @@ function fixture (files) {
     },
     // Runs the command exactly as a user would, and hands back what they would see.
     publish (...args) {
-      const { status, stdout, stderr } = spawnSync(process.execPath, [CLI, 'publish', ...args], { cwd: work, encoding: 'utf8' })
+      const { status, stdout, stderr } = spawnSync(process.execPath, [CLI, 'publish', ...args], { cwd: work, env, encoding: 'utf8' })
       return { code: status, out: stdout.trim(), err: stderr.trim() }
     },
     // What a mod author would actually download from the published branch.
-    published: (branch = 'published-mod') =>
-      execFileSync('git', ['-C', origin, 'ls-tree', '-r', '--name-only', branch], { encoding: 'utf8' }).trim().split('\n').filter(Boolean),
-    history: (branch = 'published-mod') =>
-      execFileSync('git', ['-C', origin, 'log', '--format=%s', branch], { encoding: 'utf8' }).trim().split('\n').filter(Boolean),
-    author: (branch = 'published-mod') =>
-      execFileSync('git', ['-C', origin, 'log', '-1', '--format=%an <%ae>', branch], { encoding: 'utf8' }).trim(),
-    branches: () => execFileSync('git', ['-C', origin, 'branch', '--format=%(refname:short)'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean)
+    published: (branch = 'published-mod') => lines(inOrigin('ls-tree', '-r', '--name-only', branch)),
+    history: (branch = 'published-mod') => lines(inOrigin('log', '--format=%s', branch)),
+    author: (branch = 'published-mod') => inOrigin('log', '-1', '--format=%an <%ae>', branch),
+    branches: () => lines(inOrigin('branch', '--format=%(refname:short)'))
   }
 
   self.commit(files, 'initial')

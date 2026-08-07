@@ -9,25 +9,19 @@ permissions:
   contents: read
 
 jobs:
-  # Native, because Windows is where a tool that shells out to git quietly breaks.
+  # Windows is in the matrix because it is where a tool that shells out to git quietly breaks.
   test:
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
+        node: ['20', '22']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
       - run: npm test
-
-  # The same suite in the pinned environment, which also keeps the Dockerfile from rotting.
-  docker:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: npm run test:docker

@@ -14,8 +14,7 @@
     "src/"
   ],
   "scripts": {
-    "test": "node --test",
-    "test:docker": "docker build -q -t pa-mod-build-test . && docker run --rm pa-mod-build-test"
+    "test": "node --test"
   },
   "dependencies": {
     "ignore": "^7.0.0"
