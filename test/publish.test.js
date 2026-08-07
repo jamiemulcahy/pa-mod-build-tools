@@ -164,6 +164,21 @@ test('publishes to a local branch when no remote is configured', () => {
   assert.deepEqual(lines(repo.git('ls-tree', '-r', '--name-only', 'published-mod')), ['modinfo.json', 'pa/units/tank.json'])
 })
 
+// The way in for most authors: they already keep a clean branch by hand and want this to take
+// it over. It has to build on what is there rather than refusing it or starting again.
+test('adopts a publish branch that was maintained by hand', () => {
+  const repo = fixture(MOD)
+  repo.git('checkout', '-q', '--orphan', 'published-mod')
+  repo.git('rm', '-rq', '--cached', '.')
+  repo.commit({ 'modinfo.json': '{"identifier":"com.example.mod"}' }, 'hand-built payload')
+  repo.git('push', '-q', '-u', 'origin', 'published-mod')
+  repo.git('checkout', '-qf', 'main')
+
+  assert.equal(repo.publish().code, 0)
+  assert.deepEqual(repo.published(), ['modinfo.json', 'pa/units/tank.json'])
+  assert.deepEqual(repo.history(), ['Publish mod from ' + repo.git('rev-parse', '--short=7', 'main'), 'hand-built payload'])
+})
+
 test('publishes several mods to their own branches', () => {
   const repo = fixture({
     '.modbuild': '{ "mods": [{ "root": "ModA", "target": "mod-a" }, { "root": "ModB", "target": "mod-b" }] }',
