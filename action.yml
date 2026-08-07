@@ -34,10 +34,21 @@ runs:
 
     # Inputs are passed through the environment rather than interpolated into the command line,
     # so no value can be read as shell syntax.
+    #
+    # dry-run is compared against both spellings and anything else stops the run. Treating an
+    # unrecognised value as "false" would publish for real on `dry-run: 'yes'`, which is the one
+    # mistake this input exists to make impossible.
     - name: Publish mod
       shell: bash
-      run: node "$GITHUB_ACTION_PATH/src/publish.js" publish --source "$SOURCE" --config "$CONFIG" ${DRY_RUN:+--dry-run}
+      run: |
+        set -eu
+        case "$DRY_RUN" in
+          true) set -- --dry-run ;;
+          false) set -- ;;
+          *) echo "::error::dry-run must be 'true' or 'false', but it is '$DRY_RUN'. Nothing was published."; exit 1 ;;
+        esac
+        node "$GITHUB_ACTION_PATH/src/publish.js" publish --source "$SOURCE" --config "$CONFIG" "$@"
       env:
         SOURCE: ${{ inputs.source }}
         CONFIG: ${{ inputs.config }}
-        DRY_RUN: ${{ inputs.dry-run == 'true' && '1' || '' }}
+        DRY_RUN: ${{ inputs.dry-run }}

@@ -91,8 +91,15 @@ lives in one file.
 - Your working tree and source branch are never touched — the whole thing happens in git's
   object database.
 - A run that changes nothing produces no commit.
-- The publish branch accumulates history; it is never force-pushed over.
-- It refuses to publish onto the branch you have checked out.
+- The publish branch accumulates history; it is never force-pushed over. A push that would
+  discard what is already published fails the run instead.
+- It refuses to publish onto any branch it did not write itself, so a mistyped `target` cannot
+  replace a branch holding real work — including when nothing is checked out at all, which is
+  the state GitHub Actions leaves behind for pull request and tag builds.
+- Anything it does not understand stops the run: an unknown option, an unknown `.modbuild` key,
+  an `ignore` that is not a list of strings, two mods claiming one branch, a `dry-run` that is
+  neither `true` nor `false`. Nothing is ever published on a guess — a dropped `ignore` would
+  publish exactly the files you meant to withhold.
 
 ## Tests
 
