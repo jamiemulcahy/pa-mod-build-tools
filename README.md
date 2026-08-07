@@ -2,15 +2,6 @@
 
 Build tools for [Planetary Annihilation](https://www.planetaryannihilation.com/) mod authors.
 
-> **Status: the `publish` command and the GitHub Action both work and are tested.** What is
-> still missing is the onboarding that makes them adoptable without reading this file closely —
-> a setup guide, a starter `.modbuild`, and click-through links for adding both (milestone 3,
-> [#4](https://github.com/jamiemulcahy/pa-mod-build-tools/issues/4)) — and the npm package
-> (milestone 4, [#5](https://github.com/jamiemulcahy/pa-mod-build-tools/issues/5)). Until this
-> is released, use the action at `@main` rather than `@v1`. See [ROADMAP.md](ROADMAP.md) for
-> the full sequence and the
-> [enhancement issues](https://github.com/jamiemulcahy/pa-mod-build-tools/issues) for detail.
-
 ## The problem
 
 PA scans an approved mod's GitHub repo and publishes what it finds to the community mod
@@ -37,8 +28,9 @@ PA at.
 }
 ```
 
-A repository that ships more than one mod uses a `mods` array instead, with each entry
-carrying its own `root`, `ignore` and `target`:
+`root` defaults to `.`, `ignore` to nothing, and `target` to `published-mod`. Patterns use
+`.gitignore` syntax, including negation, relative to `root`. A repository shipping more than
+one mod uses a `mods` array instead, each entry carrying its own `root`, `ignore` and `target`:
 
 ```jsonc
 // .modbuild
@@ -69,52 +61,55 @@ jobs:
       - uses: jamiemulcahy/pa-mod-build-tools@main
 ```
 
-No fetch depth, no token, no Node setup. The action takes three optional inputs — `source`,
-`config` and `dry-run` — and `dry-run: 'true'` is the safe way to see what a real run would
-publish. [docs/specs/action.md](docs/specs/action.md) covers all of it, including why each of
-those absent lines is absent.
+No fetch depth, no token, no Node setup. The action takes one optional input, `dry-run`.
 
-Nothing is excluded unless you say so. There are no hidden defaults — the starter `.modbuild`
-ships with sensible rules already written into it, so every rule is visible in a file you own
-and can edit or delete.
+Nothing is excluded unless you say so. There are no hidden defaults.
 
-## Try it
+## Running it yourself
 
-Add the workflow above to your mod's repository with `dry-run: 'true'` set on the action step,
-push, and read the job summary. It reports what would be published and everything that would
-be left out, and writes nothing.
-
-To run the same thing from a terminal instead: the command is not on npm yet, so you need a
-checkout of this repository. From that checkout, point it at your mod's git repository:
+Not on npm yet, so this needs a checkout of this repository. From your mod's repository:
 
 ```bash
-npm run publish-mod -- --repo /path/to/your/mod --dry-run
+node /path/to/pa-mod-build-tools/src/publish.js publish --dry-run
 ```
 
-Nothing is written or pushed. The report gives a count and total size for what would be
-published, and an itemised list of everything left out with the `.modbuild` rule that
-excluded it.
+A dry run writes and pushes nothing. Drop `--dry-run` to publish for real. That is the whole
+command line: the mod is built from whatever you have checked out, its config is read from
+`.modbuild`, and the publish branch is set in that file — so everything about a mod lives in
+one place.
 
-The script is `publish-mod` rather than `publish` because npm reserves `publish` as a lifecycle
-hook of `npm publish` — a script by that name would run every time this package was released.
+## What a run guarantees
 
-[docs/specs/publish.md](docs/specs/publish.md) describes the whole command: the `.modbuild`
-format, what a run guarantees, and every way it can fail.
+- Only git-tracked files are considered, so your `.gitignore` is honoured for free.
+- Your working tree and source branch are never touched — the whole thing happens in git's
+  object database, and when there is a remote to push to no local branch is written at all.
+- A run that changes nothing produces no commit.
+- The publish branch accumulates history; it is never force-pushed over. A push that would
+  discard what is already published fails the run instead.
+- An existing publish branch is adopted as-is, so you can point this at a branch you have been
+  maintaining by hand. Nothing checks whose branch it is, so a mistyped `target` publishes over
+  whatever that branch holds — check a new config with `--dry-run`.
+- An option it does not recognise stops the run, as does a `dry-run` that is neither `true` nor
+  `false` — so a mistyped request for a dry run never turns into a real publish.
 
-## Design decisions so far
+`.modbuild` itself is taken at face value: keys it does not recognise are ignored, and values of
+the wrong type fail wherever they are first used. A mistyped `ignore` therefore publishes the
+files it was meant to withhold, so check a new config with `--dry-run` before trusting it.
 
-| Decision | Choice |
-|---|---|
-| What gets stripped | Only what `.modbuild` lists. No built-in denylist. |
-| Ignore syntax | `.gitignore` syntax, including negation, relative to `root` |
-| Which files are considered | Git-tracked files only, so `.gitignore` is honoured for free |
-| Output | A commit on a configurable publish branch. No release artifacts in v1. |
-| Config split | `.modbuild` owns the payload (root, ignore, target); workflow YAML owns plumbing (source, config, dry-run) |
-| Credentials | Whatever `actions/checkout` persisted. The action has no token input of its own. |
-| Packaging | npm package, invoked by a composite action |
+## Tests
 
-See [ROADMAP.md](ROADMAP.md) for how this gets built, and the individual issues for full
-detail and open questions.
+```bash
+npm test
+```
+
+Every test drives the real command against a real repository, with a bare repository standing
+in for GitHub, and asserts on what lands on the published branch. Nothing is mocked and nothing
+internal is imported, so the tests survive any rewrite of the implementation.
+
+Each test builds its own repository under a fresh temp directory, and runs with the system and
+global git config pointed at paths that do not exist. Whatever you have in your own `.gitconfig`
+— `core.autocrlf`, `commit.gpgsign`, `init.defaultBranch` — cannot reach a suite whose whole
+subject is git's behaviour.
 
 ## Licence
 
