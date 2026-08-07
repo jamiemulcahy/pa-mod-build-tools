@@ -32,7 +32,9 @@ runs:
     - name: Publish mod
       shell: bash
       run: |
-        set -eu
+        # -e without -u: an empty "$@" is an unbound variable on bash before 4.4, which is what
+        # a self-hosted macOS runner still ships.
+        set -e
         case "$DRY_RUN" in
           true) set -- --dry-run ;;
           false) set -- ;;

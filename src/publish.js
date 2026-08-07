@@ -33,11 +33,12 @@ const sha = line(['rev-parse', 'HEAD^{commit}'])
 const remote = line(['remote']).split('\n').includes('origin') ? 'origin' : null
 
 for (const { root, ignore: patterns, target } of mods) {
-  // Prefer what is actually on the remote, so a stale local branch cannot cause a bad publish.
-  if (remote) attempt(['fetch', '--no-tags', '-q', remote, `+refs/heads/${target}:refs/remotes/${remote}/${target}`])
-  const parent = attempt(['rev-parse', '--verify', '-q', `refs/remotes/${remote}/${target}`]) ??
-    attempt(['rev-parse', '--verify', '-q', `refs/heads/${target}`])
-
+  // Dropped before the fetch so it cannot answer for one that failed: a branch deleted on the
+  // remote would otherwise leave a stale ref that every later run compares equal to, reporting
+  // "unchanged" for good while the remote has nothing on it.
+  const tracking = `refs/remotes/${remote}/${target}`
+  if (remote) { attempt(['update-ref', '-d', tracking]); attempt(['fetch', '--no-tags', '-q', remote, `+refs/heads/${target}:${tracking}`]) }
+  const parent = attempt(['rev-parse', '--verify', '-q', remote ? tracking : `refs/heads/${target}`])
 
   const prefix = root === '.' ? '' : `${root}/`
   // The library matches case-insensitively by default where git does not.
@@ -61,10 +62,10 @@ for (const { root, ignore: patterns, target } of mods) {
 
   const message = `Publish mod from ${sha.slice(0, 7)}`
   const commit = line(['commit-tree', tree, ...(parent ? ['-p', parent] : []), '-m', message], { env: { ...process.env, ...AUTHOR } })
-  // Pushed before the local ref moves: a local branch left pointing at a payload that never
-  // reached the remote would make the next run report "unchanged" and exit 0 with nothing there.
+  // With a remote, no local branch is written at all: the push updates the tracking ref this run
+  // reads, and moving refs/heads would rewrite a branch the author may have checked out.
   if (remote) git(['push', '-q', remote, `${commit}:refs/heads/${target}`])
-  git(['update-ref', `refs/heads/${target}`, commit])
+  else git(['update-ref', `refs/heads/${target}`, commit])
   log(`${target}: published ${files.length} files from ${root} as ${commit.slice(0, 7)}${remote ? '' : ' (not pushed, no remote)'}`)
 }
 

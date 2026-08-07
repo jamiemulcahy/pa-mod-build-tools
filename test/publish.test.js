@@ -128,6 +128,42 @@ test('a dry run reports what would happen and writes nothing', () => {
 })
 
 
+// The local tracking ref outlives a branch deleted on the remote, and a fetch that fails cannot
+// correct it — so a run that trusted it would compare equal and report "unchanged" for good.
+test('recreates the publish branch after it is deleted on the remote', () => {
+  const repo = fixture(MOD)
+  repo.publish()
+  const stale = repo.tip()
+  repo.git('push', '-q', 'origin', '--delete', 'published-mod')
+  // Deleting through this clone tidies its tracking ref up too. Put it back, so the run faces
+  // what it would if someone had deleted the branch on GitHub instead.
+  repo.git('update-ref', 'refs/remotes/origin/published-mod', stale)
+
+  const result = repo.publish()
+  assert.equal(result.code, 0)
+  assert.doesNotMatch(result.out, /unchanged/)
+  assert.deepEqual(repo.published(), ['modinfo.json', 'pa/units/tank.json'])
+})
+
+// Moving refs/heads/<target> would rewrite a branch the author has checked out, leaving every
+// file in it looking changed. With a remote there is no reason to write a local branch at all.
+test('writes no local branch when it has a remote to push to', () => {
+  const repo = fixture({ ...MOD, '.modbuild': '{ "root": "Mod", "target": "main" }' })
+  const before = repo.git('rev-parse', 'main')
+  repo.publish()
+  assert.equal(repo.git('rev-parse', 'main'), before)
+  assert.equal(repo.git('status', '--porcelain'), '')
+})
+
+test('publishes to a local branch when no remote is configured', () => {
+  const repo = fixture(MOD)
+  repo.git('remote', 'remove', 'origin')
+  const result = repo.publish()
+  assert.equal(result.code, 0)
+  assert.match(result.out, /not pushed, no remote/)
+  assert.deepEqual(lines(repo.git('ls-tree', '-r', '--name-only', 'published-mod')), ['modinfo.json', 'pa/units/tank.json'])
+})
+
 test('publishes several mods to their own branches', () => {
   const repo = fixture({
     '.modbuild': '{ "mods": [{ "root": "ModA", "target": "mod-a" }, { "root": "ModB", "target": "mod-b" }] }',

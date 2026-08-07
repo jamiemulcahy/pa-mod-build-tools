@@ -82,7 +82,7 @@ one place.
 
 - Only git-tracked files are considered, so your `.gitignore` is honoured for free.
 - Your working tree and source branch are never touched — the whole thing happens in git's
-  object database.
+  object database, and when there is a remote to push to no local branch is written at all.
 - A run that changes nothing produces no commit.
 - The publish branch accumulates history; it is never force-pushed over. A push that would
   discard what is already published fails the run instead.

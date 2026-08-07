@@ -51,6 +51,8 @@ back out, and each earns its way back only when a mod author actually hits it:
 - **Guarding the target branch.** Any `target` is written to, including one holding real work.
   Refusing branches the tool did not author would also block adopting a publish branch someone
   has been maintaining by hand, which is the likeliest way in.
+- **All-or-nothing multi-mod runs.** Mods publish one at a time, so a run that fails on the
+  second has already pushed the first. It exits non-zero and says which failed.
 - **Options.** No `--source`, `--config`, `--no-push` or `--target`: the mod is built from what
   is checked out, its config sits beside it, and the publish branch belongs to the mod.
 - **Reporting.** No per-file account of which ignore rule excluded what, and no rendered job
