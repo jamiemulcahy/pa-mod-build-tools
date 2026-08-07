@@ -55,6 +55,10 @@ for (const { root, ignore: patterns, target } of mods) {
     .map(([[mode, , blob], path]) => ({ mode, blob, path: path.slice(prefix.length) }))
     .filter(({ path }) => !ig.ignores(path))
   if (!files.length) die(`nothing to publish from "${root}"`)
+  // A gitlink records a commit this repository does not contain, so publishing one leaves an
+  // empty directory where the submodule's files should be — a mod with a hole in it.
+  const gitlink = files.find(({ mode }) => mode === '160000')
+  if (gitlink) die(`"${gitlink.path}" is a submodule — add it to "ignore", or vendor its files into the mod`)
 
   // A scratch index, so the caller's real one is never read or written.
   const dir = mkdtempSync(join(tmpdir(), 'pamb-'))

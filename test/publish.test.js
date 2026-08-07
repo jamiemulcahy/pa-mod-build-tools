@@ -153,6 +153,18 @@ test('refuses a target branch it did not publish itself, even from a detached HE
 })
 
 
+// Publishing the gitlink would put a pointer to a commit the published repo does not have,
+// so whoever downloads the branch gets an empty folder and no warning.
+test('refuses to publish a submodule rather than shipping an empty directory', () => {
+  const repo = fixture(MOD)
+  repo.git('update-index', '--add', '--cacheinfo', `160000,${repo.git('rev-parse', 'HEAD')},Mod/shared`)
+  repo.git('commit', '-qm', 'add a gitlink')
+  const result = repo.publish()
+  assert.equal(result.code, 1)
+  assert.match(result.err, /is a submodule/)
+  assert.deepEqual(repo.branches(), ['main'])
+})
+
 test('publishes several mods to their own branches', () => {
   const repo = fixture({
     '.modbuild': '{ "mods": [{ "root": "ModA", "target": "mod-a" }, { "root": "ModB", "target": "mod-b" }] }',
