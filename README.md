@@ -74,16 +74,10 @@ Not on npm yet, so this needs a checkout of this repository. From your mod's rep
 node /path/to/pa-mod-build-tools/src/publish.js publish --dry-run
 ```
 
-A dry run writes and pushes nothing. Drop `--dry-run` to publish for real.
-
-| Option | Default | |
-|---|---|---|
-| `--source <ref>` | `HEAD` | branch, tag or commit to build from |
-| `--config <path>` | `.modbuild` | where the config lives |
-| `--dry-run` | off | report only |
-
-The publish branch is set in `.modbuild`, not on the command line, so everything about a mod
-lives in one file.
+A dry run writes and pushes nothing. Drop `--dry-run` to publish for real. That is the whole
+command line: the mod is built from whatever you have checked out, its config is read from
+`.modbuild`, and the publish branch is set in that file — so everything about a mod lives in
+one place.
 
 ## What a run guarantees
 

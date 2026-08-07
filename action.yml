@@ -11,19 +11,13 @@ branding:
   color: 'orange'
 
 inputs:
-  source:
-    description: 'Branch, tag or commit to build the mod from. The default builds whatever actions/checkout checked out.'
-    default: 'HEAD'
-  config:
-    description: 'Path to the .modbuild file, resolved relative to the repository.'
-    default: '.modbuild'
   dry-run:
     description: 'Report what would be published, writing and pushing nothing.'
     default: 'false'
 
-# There is deliberately no `target` input: the publish branch belongs to the mod, so it is set
-# in .modbuild. Nor is there a `token` input — the action uses whatever actions/checkout
-# persisted.
+# This is the whole input surface. The publish branch belongs to the mod, so it is set in
+# .modbuild rather than here; the mod is built from whatever actions/checkout checked out; and
+# the push uses whatever credentials actions/checkout persisted.
 runs:
   using: 'composite'
   steps:
@@ -32,9 +26,6 @@ runs:
       working-directory: ${{ github.action_path }}
       run: npm ci --omit=dev --ignore-scripts --no-audit --no-fund
 
-    # Inputs are passed through the environment rather than interpolated into the command line,
-    # so no value can be read as shell syntax.
-    #
     # dry-run is compared against both spellings and anything else stops the run. Treating an
     # unrecognised value as "false" would publish for real on `dry-run: 'yes'`, which is the one
     # mistake this input exists to make impossible.
@@ -47,8 +38,6 @@ runs:
           false) set -- ;;
           *) echo "::error::dry-run must be 'true' or 'false', but it is '$DRY_RUN'. Nothing was published."; exit 1 ;;
         esac
-        node "$GITHUB_ACTION_PATH/src/publish.js" publish --source "$SOURCE" --config "$CONFIG" "$@"
+        node "$GITHUB_ACTION_PATH/src/publish.js" publish "$@"
       env:
-        SOURCE: ${{ inputs.source }}
-        CONFIG: ${{ inputs.config }}
         DRY_RUN: ${{ inputs.dry-run }}

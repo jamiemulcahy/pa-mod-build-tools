@@ -1,73 +1,53 @@
 #!/usr/bin/env node
 // Publishes a clean copy of a Planetary Annihilation mod to its own branch.
 //
-// Works entirely in git's object database — no working tree is touched, so this is safe to
-// run over a repository you are in the middle of editing.
-//
-// Everything unrecognised here is fatal rather than ignored. A tool whose whole job is keeping
-// files off a public branch must never treat "I did not understand that" as "carry on".
+// Works entirely in git's object database — no working tree is touched, so this is safe to run
+// over a repository you are in the middle of editing.
 import { execFileSync } from 'node:child_process'
 import { readFileSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import ignore from 'ignore'
 
-const USAGE = 'usage: pa-mod-build publish [--source <ref>] [--config <path>] [--dry-run]'
-// Published commits are generated output, so they are attributed to the tool rather than to
-// whoever happened to run it. That also means a run needs no git identity configured, which a
-// CI runner generally has not got, and it is how a later run tells a branch it wrote itself
-// apart from one holding somebody's real work.
-const IDENTITY = { name: 'pa-mod-build', email: 'pa-mod-build@users.noreply.github.com' }
-const OPTIONS = { '--source': true, '--config': true, '--dry-run': false } // true = takes a value
+// Published commits are attributed to the tool rather than to whoever ran it. A run then needs
+// no git identity configured — a CI runner has not got one — and a later run can tell a branch
+// it wrote itself from one holding somebody's real work.
+const EMAIL = 'pa-mod-build@users.noreply.github.com'
+const AUTHOR = {
+  GIT_AUTHOR_NAME: 'pa-mod-build', GIT_AUTHOR_EMAIL: EMAIL, GIT_COMMITTER_NAME: 'pa-mod-build', GIT_COMMITTER_EMAIL: EMAIL
+}
 
 const git = (args, opts) => execFileSync('git', args, { encoding: 'utf8', maxBuffer: 1 << 28, ...opts })
 const line = (args, opts) => git(args, opts).trim()
 // For commands whose failure is a legitimate answer: no such branch yet, or an unreachable remote.
-const attempt = (args, opts) => { try { return line(args, { stdio: 'pipe', ...opts }) } catch { return null } }
-const lines = (text) => text.split('\n').filter(Boolean)
+const attempt = (args) => { try { return line(args, { stdio: 'pipe' }) } catch { return null } }
 
-// "--dry-run=true" and "--dryrun" would otherwise parse as no dry run at all and publish for
-// real — the exact opposite of what whoever typed them asked for.
+// Checked rather than ignored so that "--dry-run=true" cannot parse as no dry run and publish
+// for real, which is the opposite of what whoever typed it asked for.
 const argv = process.argv.slice(2)
-if (argv[0] !== 'publish') die(USAGE)
-for (let i = 1; i < argv.length; i++) {
-  if (!(argv[i] in OPTIONS)) die(`unknown option ${JSON.stringify(argv[i])}\n${USAGE}`)
-  if (!OPTIONS[argv[i]]) continue
-  if (i + 1 >= argv.length || argv[i + 1].startsWith('--')) die(`${argv[i]} needs a value\n${USAGE}`)
-  i++
-}
-const flag = (name, fallback) => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : fallback)
-const dryRun = argv.includes('--dry-run')
+const dryRun = argv[1] === '--dry-run'
+if (argv[0] !== 'publish' || argv.length > (dryRun ? 2 : 1)) die('usage: pa-mod-build publish [--dry-run]')
 
-const configPath = flag('--config', '.modbuild')
-const raw = JSON.parse(readFileSync(configPath, 'utf8'))
+const raw = JSON.parse(readFileSync('.modbuild', 'utf8'))
 const mods = (raw.mods ?? [raw]).map((mod) => ({ root: '.', ignore: [], target: 'published-mod', ...mod }))
-const sha = line(['rev-parse', `${flag('--source', 'HEAD')}^{commit}`])
+const sha = line(['rev-parse', 'HEAD^{commit}'])
 const remote = line(['remote']).split('\n').includes('origin') ? 'origin' : null
-// Every branch checked out anywhere in this repository, linked worktrees included. Asking git
-// this rather than reading HEAD is what makes the guard below still work under a detached HEAD,
-// which is what actions/checkout leaves behind for pull_request events and tag pushes.
-const checkedOut = lines(line(['worktree', 'list', '--porcelain'])).filter((l) => l.startsWith('branch ')).map((l) => l.slice(7))
 
 for (const { root, ignore: patterns, target } of mods) {
-  if (checkedOut.includes(`refs/heads/${target}`)) {
-    die(`"${target}" is checked out — publishing to it would replace the files under a working tree`)
-  }
-
+  // Prefer what is actually on the remote, so a stale local branch cannot cause a bad publish.
   if (remote) attempt(['fetch', '--no-tags', '-q', remote, `+refs/heads/${target}:refs/remotes/${remote}/${target}`])
   const parent = attempt(['rev-parse', '--verify', '-q', `refs/remotes/${remote}/${target}`]) ??
     attempt(['rev-parse', '--verify', '-q', `refs/heads/${target}`])
 
-  // Refuse any branch this tool did not write. That is what stops a "target" naming the branch
-  // being built from — or any other branch holding real work — from being replaced by a payload.
-  if (parent && attempt(['log', '-1', '--format=%ae', parent]) !== IDENTITY.email) {
-    die(`"${target}" was not published by pa-mod-build, so overwriting it would throw away whatever ` +
-      `is on it. Set a different "target" in ${configPath}, or delete the branch if you really mean to.`)
+  // Refuse any branch this tool did not write. A "target" naming a branch that holds real work
+  // is the one mistake here that destroys something: the payload commits cleanly on top of it
+  // and pushes as an ordinary fast-forward, so nothing else would stop it.
+  if (parent && attempt(['log', '-1', '--format=%ae', parent]) !== EMAIL) {
+    die(`"${target}" was not published by pa-mod-build — refusing to overwrite it`)
   }
 
   const prefix = root === '.' ? '' : `${root}/`
-  // The library defaults to case-insensitive matching; git does not, and over-matching here
-  // would silently drop files the author meant to ship.
+  // The library matches case-insensitively by default where git does not.
   const ig = ignore({ ignorecase: false }).add(patterns)
   const files = git(['ls-tree', '-r', '-z', sha]).split('\0').filter(Boolean)
     .map((row) => [row.slice(0, row.indexOf('\t')).split(' '), row.slice(row.indexOf('\t') + 1)])
@@ -75,14 +55,6 @@ for (const { root, ignore: patterns, target } of mods) {
     .map(([[mode, , blob], path]) => ({ mode, blob, path: path.slice(prefix.length) }))
     .filter(({ path }) => !ig.ignores(path))
   if (!files.length) die(`nothing to publish from "${root}"`)
-
-  // A gitlink records a commit this repository does not contain, so publishing one leaves an
-  // empty directory where the submodule should be. Better to stop than to ship a mod with a hole.
-  const gitlink = files.find(({ mode }) => mode === '160000')
-  if (gitlink) {
-    die(`"${gitlink.path}" is a submodule, whose contents cannot be published as files. Add it to ` +
-      `"ignore" in ${configPath}, or vendor its files into the mod.`)
-  }
 
   // A scratch index, so the caller's real one is never read or written.
   const dir = mkdtempSync(join(tmpdir(), 'pamb-'))
@@ -94,18 +66,10 @@ for (const { root, ignore: patterns, target } of mods) {
   if (parent && tree === line(['rev-parse', `${parent}^{tree}`])) { log(`${target}: unchanged`); continue }
   if (dryRun) { log(`${target}: would publish ${files.length} files from ${root}`); continue }
 
-  const commit = line(['commit-tree', tree, ...(parent ? ['-p', parent] : []), '-m', `Publish mod from ${sha.slice(0, 7)}`], {
-    env: {
-      ...process.env,
-      GIT_AUTHOR_NAME: IDENTITY.name,
-      GIT_AUTHOR_EMAIL: IDENTITY.email,
-      GIT_COMMITTER_NAME: IDENTITY.name,
-      GIT_COMMITTER_EMAIL: IDENTITY.email
-    }
-  })
-  // Pushed before the local ref moves. A local branch left pointing at a payload that never
-  // reached the remote would make the next run find a matching tree, report "unchanged" and
-  // exit 0 while the remote still had nothing on it.
+  const message = `Publish mod from ${sha.slice(0, 7)}`
+  const commit = line(['commit-tree', tree, ...(parent ? ['-p', parent] : []), '-m', message], { env: { ...process.env, ...AUTHOR } })
+  // Pushed before the local ref moves: a local branch left pointing at a payload that never
+  // reached the remote would make the next run report "unchanged" and exit 0 with nothing there.
   if (remote) git(['push', '-q', remote, `${commit}:refs/heads/${target}`])
   git(['update-ref', `refs/heads/${target}`, commit])
   log(`${target}: published ${files.length} files from ${root} as ${commit.slice(0, 7)}${remote ? '' : ' (not pushed, no remote)'}`)

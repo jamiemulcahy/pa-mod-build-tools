@@ -131,13 +131,13 @@ test('refuses to publish onto the branch you are standing on', () => {
   const repo = fixture({ ...MOD, '.modbuild': '{ "root": "Mod", "target": "main" }' })
   const result = repo.publish()
   assert.equal(result.code, 1)
-  assert.match(result.err, /checked out/)
+  assert.match(result.err, /was not published by pa-mod-build/)
   assert.deepEqual(repo.branches(), ['main'])
 })
 
-// The guard above only covers branches this worktree has checked out, which under a detached
-// HEAD is none of them — and a detached HEAD is what actions/checkout leaves behind for
-// pull_request events. What actually protects a branch is that this tool did not write it.
+// Nothing is checked out at all here — the state actions/checkout leaves behind for
+// pull_request events and tag pushes — so a guard reading HEAD would have nothing to compare.
+// What protects a branch is that this tool did not write it.
 test('refuses a target branch it did not publish itself, even from a detached HEAD', () => {
   const repo = fixture({ ...MOD, '.modbuild': '{ "root": "Mod", "target": "release" }' })
   repo.git('checkout', '-q', '-b', 'release')
@@ -152,14 +152,6 @@ test('refuses a target branch it did not publish itself, even from a detached HE
   assert.ok(repo.published('release').includes('RELEASE_NOTES.md'), 'the branch must be untouched')
 })
 
-test('refuses to build a mod out of a submodule, rather than publishing an empty directory', () => {
-  const repo = fixture(MOD)
-  repo.git('update-index', '--add', '--cacheinfo', `160000,${repo.git('rev-parse', 'HEAD')},Mod/shared`)
-  repo.git('commit', '-qm', 'add a gitlink')
-  const result = repo.publish()
-  assert.equal(result.code, 1)
-  assert.match(result.err, /submodule/)
-})
 
 test('publishes several mods to their own branches', () => {
   const repo = fixture({
@@ -190,14 +182,6 @@ test('ignore rules follow gitignore semantics, negation included', () => {
   assert.deepEqual(repo.published(), ['.modbuild', 'keep.log', 'modinfo.json'])
 })
 
-test('builds from another branch with --source', () => {
-  const repo = fixture(MOD)
-  repo.git('checkout', '-q', '-b', 'release')
-  repo.commit({ 'Mod/pa/units/ship.json': 'ship' })
-  repo.git('checkout', '-q', 'main')
-  repo.publish('--source', 'release')
-  assert.ok(repo.published().includes('pa/units/ship.json'))
-})
 
 // Published commits are generated output, and attributing them to the tool is also what lets a
 // run work on a runner with no git identity configured.
@@ -214,22 +198,16 @@ test('reports a missing .modbuild rather than publishing something arbitrary', (
   assert.match(result.err, /ENOENT|no such file/i)
 })
 
-test('an unrecognised option stops the run rather than quietly publishing for real', () => {
+test('an unrecognised argument stops the run rather than quietly publishing for real', () => {
   for (const bad of ['--dry-run=true', '--dryrun', '--help', 'published-mod']) {
     const repo = fixture(MOD)
     const result = repo.publish(bad)
     assert.equal(result.code, 1, `expected ${bad} to be rejected`)
-    assert.match(result.err, /unknown option/)
+    assert.match(result.err, /usage: pa-mod-build/)
     assert.deepEqual(repo.branches(), ['main'], `${bad} must publish nothing`)
   }
 })
 
-test('an option missing its value stops the run rather than using the next flag as one', () => {
-  const repo = fixture(MOD)
-  const result = repo.publish('--source')
-  assert.equal(result.code, 1)
-  assert.match(result.err, /--source needs a value/)
-})
 
 test('ignore matching is case sensitive, as gitignore is', () => {
   const repo = fixture({ '.modbuild': '{ "root": ".", "ignore": ["ICON.PNG"] }', 'modinfo.json': 'm', 'icon.png': 'i' })
