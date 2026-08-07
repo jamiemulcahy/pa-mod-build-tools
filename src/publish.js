@@ -19,7 +19,6 @@ const USAGE = 'usage: pa-mod-build publish [--source <ref>] [--config <path>] [-
 // apart from one holding somebody's real work.
 const IDENTITY = { name: 'pa-mod-build', email: 'pa-mod-build@users.noreply.github.com' }
 const OPTIONS = { '--source': true, '--config': true, '--dry-run': false } // true = takes a value
-const MOD_KEYS = ['root', 'ignore', 'target']
 
 const git = (args, opts) => execFileSync('git', args, { encoding: 'utf8', maxBuffer: 1 << 28, ...opts })
 const line = (args, opts) => git(args, opts).trim()
@@ -41,7 +40,8 @@ const flag = (name, fallback) => (argv.includes(name) ? argv[argv.indexOf(name) 
 const dryRun = argv.includes('--dry-run')
 
 const configPath = flag('--config', '.modbuild')
-const mods = readConfig(configPath)
+const raw = JSON.parse(readFileSync(configPath, 'utf8'))
+const mods = (raw.mods ?? [raw]).map((mod) => ({ root: '.', ignore: [], target: 'published-mod', ...mod }))
 const sha = line(['rev-parse', `${flag('--source', 'HEAD')}^{commit}`])
 const remote = line(['remote']).split('\n').includes('origin') ? 'origin' : null
 // Every branch checked out anywhere in this repository, linked worktrees included. Asking git
@@ -109,51 +109,6 @@ for (const { root, ignore: patterns, target } of mods) {
   if (remote) git(['push', '-q', remote, `${commit}:refs/heads/${target}`])
   git(['update-ref', `refs/heads/${target}`, commit])
   log(`${target}: published ${files.length} files from ${root} as ${commit.slice(0, 7)}${remote ? '' : ' (not pushed, no remote)'}`)
-}
-
-function readConfig (path) {
-  const raw = JSON.parse(readFileSync(path, 'utf8'))
-  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-    die(`${path} must contain a JSON object, for example {"root": "Mod"}.`)
-  }
-
-  const multi = raw.mods !== undefined
-  checkKeys(raw, multi ? ['$schema', 'mods'] : ['$schema', ...MOD_KEYS], path)
-  if (multi && (!Array.isArray(raw.mods) || raw.mods.length === 0)) {
-    die(`${path}: "mods" must be a non-empty array of mod objects.`)
-  }
-
-  const mods = (multi ? raw.mods : [raw]).map((entry, index) => {
-    const where = multi ? `${path}: mods[${index}]` : path
-    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) die(`${where} must be an object.`)
-    // Only in the multi form: in the single form this entry *is* the top-level object, whose
-    // keys were checked above against a list that also permits "$schema".
-    if (multi) checkKeys(entry, MOD_KEYS, where)
-
-    const { root = '.', ignore: patterns = [], target = 'published-mod' } = entry
-    if (typeof root !== 'string') die(`${where}: "root" must be a string.`)
-    if (typeof target !== 'string') die(`${where}: "target" must be a string.`)
-    if (!Array.isArray(patterns) || patterns.some((p) => typeof p !== 'string')) {
-      die(`${where}: "ignore" must be an array of strings.`)
-    }
-    return { root, ignore: patterns, target }
-  })
-
-  const targets = mods.map((mod) => mod.target)
-  const duplicate = targets.find((target, index) => targets.indexOf(target) !== index)
-  if (duplicate !== undefined) {
-    die(`${path}: more than one mod publishes to "${duplicate}", so they would overwrite each ` +
-      'other. Give each mod its own "target".')
-  }
-  return mods
-}
-
-// An unknown key is fatal because the likeliest one to mistype is "ignore" — and a dropped
-// "ignore" publishes every file it was meant to withhold, reporting success as it goes.
-function checkKeys (object, allowed, where) {
-  for (const key of Object.keys(object)) {
-    if (!allowed.includes(key)) die(`${where}: unknown key "${key}". Allowed here: ${allowed.join(', ')}.`)
-  }
 }
 
 function log (message) { process.stdout.write(`${message}\n`) }

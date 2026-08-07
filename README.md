@@ -96,10 +96,12 @@ lives in one file.
 - It refuses to publish onto any branch it did not write itself, so a mistyped `target` cannot
   replace a branch holding real work — including when nothing is checked out at all, which is
   the state GitHub Actions leaves behind for pull request and tag builds.
-- Anything it does not understand stops the run: an unknown option, an unknown `.modbuild` key,
-  an `ignore` that is not a list of strings, two mods claiming one branch, a `dry-run` that is
-  neither `true` nor `false`. Nothing is ever published on a guess — a dropped `ignore` would
-  publish exactly the files you meant to withhold.
+- An option it does not recognise stops the run, as does a `dry-run` that is neither `true` nor
+  `false` — so a mistyped request for a dry run never turns into a real publish.
+
+`.modbuild` itself is taken at face value: keys it does not recognise are ignored, and values of
+the wrong type fail wherever they are first used. A mistyped `ignore` therefore publishes the
+files it was meant to withhold, so check a new config with `--dry-run` before trusting it.
 
 ## Tests
 

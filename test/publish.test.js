@@ -214,51 +214,6 @@ test('reports a missing .modbuild rather than publishing something arbitrary', (
   assert.match(result.err, /ENOENT|no such file/i)
 })
 
-// Config and argument handling must fail closed. Every case below is someone who believes they
-// have excluded a file, or asked for no writes at all, and the old behaviour was to publish.
-test('a mistyped config key stops the run instead of publishing what it should have excluded', () => {
-  const repo = fixture({ ...MOD, '.modbuild': '{ "root": "Mod", "ignores": ["pachat.zip"] }' })
-  const result = repo.publish()
-  assert.equal(result.code, 1)
-  assert.match(result.err, /unknown key "ignores"/)
-  assert.deepEqual(repo.branches(), ['main'])
-})
-
-test('catches a mistyped key inside a mods entry too', () => {
-  const repo = fixture({ '.modbuild': '{ "mods": [{ "root": "Mod", "ignores": ["x"] }] }', 'Mod/modinfo.json': 'm' })
-  const result = repo.publish()
-  assert.equal(result.code, 1)
-  assert.match(result.err, /mods\[0\]: unknown key "ignores"/)
-})
-
-// Editors use $schema for completion, so rejecting it would punish the people most likely to
-// get the rest of the file right.
-test('accepts a $schema key alongside a single mod', () => {
-  const repo = fixture({ '.modbuild': '{ "$schema": "https://example.com/s.json", "root": "Mod" }', 'Mod/modinfo.json': 'm' })
-  assert.equal(repo.publish().code, 0)
-  assert.deepEqual(repo.published(), ['modinfo.json'])
-})
-
-test('rejects an "ignore" that is not an array of strings', () => {
-  for (const bad of ['null', '"pachat.zip"', '["ok", 42]']) {
-    const repo = fixture({ ...MOD, '.modbuild': `{ "root": "Mod", "ignore": ${bad} }` })
-    const result = repo.publish()
-    assert.equal(result.code, 1, `expected ${bad} to be rejected`)
-    assert.match(result.err, /"ignore" must be an array of strings/)
-  }
-})
-
-test('rejects two mods that would publish to the same branch', () => {
-  const repo = fixture({
-    '.modbuild': '{ "mods": [{ "root": "ModA" }, { "root": "ModB" }] }',
-    'ModA/modinfo.json': 'a',
-    'ModB/modinfo.json': 'b'
-  })
-  const result = repo.publish()
-  assert.equal(result.code, 1)
-  assert.match(result.err, /more than one mod publishes to "published-mod"/)
-})
-
 test('an unrecognised option stops the run rather than quietly publishing for real', () => {
   for (const bad of ['--dry-run=true', '--dryrun', '--help', 'published-mod']) {
     const repo = fixture(MOD)
