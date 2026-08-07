@@ -127,31 +127,6 @@ test('a dry run reports what would happen and writes nothing', () => {
   assert.deepEqual(repo.branches(), ['main'])
 })
 
-test('refuses to publish onto the branch you are standing on', () => {
-  const repo = fixture({ ...MOD, '.modbuild': '{ "root": "Mod", "target": "main" }' })
-  const result = repo.publish()
-  assert.equal(result.code, 1)
-  assert.match(result.err, /was not published by pa-mod-build/)
-  assert.deepEqual(repo.branches(), ['main'])
-})
-
-// Nothing is checked out at all here — the state actions/checkout leaves behind for
-// pull_request events and tag pushes — so a guard reading HEAD would have nothing to compare.
-// What protects a branch is that this tool did not write it.
-test('refuses a target branch it did not publish itself, even from a detached HEAD', () => {
-  const repo = fixture({ ...MOD, '.modbuild': '{ "root": "Mod", "target": "release" }' })
-  repo.git('checkout', '-q', '-b', 'release')
-  repo.commit({ 'RELEASE_NOTES.md': 'notes' })
-  repo.git('push', '-q', '-u', 'origin', 'release')
-  repo.git('checkout', '-q', 'main')
-  repo.git('checkout', '-q', '--detach')
-
-  const result = repo.publish()
-  assert.equal(result.code, 1)
-  assert.match(result.err, /was not published by pa-mod-build/)
-  assert.ok(repo.published('release').includes('RELEASE_NOTES.md'), 'the branch must be untouched')
-})
-
 
 test('publishes several mods to their own branches', () => {
   const repo = fixture({

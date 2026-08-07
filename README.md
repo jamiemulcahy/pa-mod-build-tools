@@ -87,9 +87,9 @@ one place.
 - A run that changes nothing produces no commit.
 - The publish branch accumulates history; it is never force-pushed over. A push that would
   discard what is already published fails the run instead.
-- It refuses to publish onto any branch it did not write itself, so a mistyped `target` cannot
-  replace a branch holding real work — including when nothing is checked out at all, which is
-  the state GitHub Actions leaves behind for pull request and tag builds.
+- An existing publish branch is adopted as-is, so you can point this at a branch you have been
+  maintaining by hand. Nothing checks whose branch it is, so a mistyped `target` publishes over
+  whatever that branch holds — check a new config with `--dry-run`.
 - An option it does not recognise stops the run, as does a `dry-run` that is neither `true` nor
   `false` — so a mistyped request for a dry run never turns into a real publish.
 

@@ -48,6 +48,9 @@ back out, and each earns its way back only when a mod author actually hits it:
   each other. `--dry-run` is the way to check a config before trusting it.
 - **Submodules.** A `git submodule` inside a mod's `root` publishes as a pointer to a commit the
   branch does not contain, so the download has an empty directory there.
+- **Guarding the target branch.** Any `target` is written to, including one holding real work.
+  Refusing branches the tool did not author would also block adopting a publish branch someone
+  has been maintaining by hand, which is the likeliest way in.
 - **Options.** No `--source`, `--config`, `--no-push` or `--target`: the mod is built from what
   is checked out, its config sits beside it, and the publish branch belongs to the mod.
 - **Reporting.** No per-file account of which ignore rule excluded what, and no rendered job

@@ -9,9 +9,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import ignore from 'ignore'
 
-// Published commits are attributed to the tool rather than to whoever ran it. A run then needs
-// no git identity configured — a CI runner has not got one — and a later run can tell a branch
-// it wrote itself from one holding somebody's real work.
+// Published commits are attributed to the tool rather than to whoever ran it, so a run needs no
+// git identity configured — a CI runner has not got one.
 const EMAIL = 'pa-mod-build@users.noreply.github.com'
 const AUTHOR = {
   GIT_AUTHOR_NAME: 'pa-mod-build', GIT_AUTHOR_EMAIL: EMAIL, GIT_COMMITTER_NAME: 'pa-mod-build', GIT_COMMITTER_EMAIL: EMAIL
@@ -39,12 +38,6 @@ for (const { root, ignore: patterns, target } of mods) {
   const parent = attempt(['rev-parse', '--verify', '-q', `refs/remotes/${remote}/${target}`]) ??
     attempt(['rev-parse', '--verify', '-q', `refs/heads/${target}`])
 
-  // Refuse any branch this tool did not write. A "target" naming a branch that holds real work
-  // is the one mistake here that destroys something: the payload commits cleanly on top of it
-  // and pushes as an ordinary fast-forward, so nothing else would stop it.
-  if (parent && attempt(['log', '-1', '--format=%ae', parent]) !== EMAIL) {
-    die(`"${target}" was not published by pa-mod-build — refusing to overwrite it`)
-  }
 
   const prefix = root === '.' ? '' : `${root}/`
   // The library matches case-insensitively by default where git does not.
