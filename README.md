@@ -4,11 +4,12 @@ Build tools for [Planetary Annihilation](https://www.planetaryannihilation.com/)
 
 ## The problem
 
-PA scans an approved mod's GitHub repo and publishes what it finds to the community mod
-browser. It publishes *everything* it finds — so players downloading a mod routinely also
-download `.vscode/`, `.idea/`, `CLAUDE.md`, Photoshop sources, test fixtures, and in at least
-one real case an entire C# backend solution. Keeping that out means the author has to
-maintain a separate clean branch by hand, which nobody does for long.
+PA installs a mod from a zip URL — usually a release artefact, or the `.zip` archive GitHub
+serves for a branch. Whatever is in that zip is what players get, so an archive taken straight
+from a working branch ships *everything* on it: `.vscode/`, `.idea/`, `CLAUDE.md`, Photoshop
+sources, test fixtures, and in at least one real case an entire C# backend solution. Keeping
+that out means the author has to maintain a separate clean branch by hand, which nobody does
+for long.
 
 ## The plan
 
@@ -16,8 +17,11 @@ One command, wrapped in one GitHub Action step.
 
 You commit a `.modbuild` file describing which directory is your mod, which paths to leave
 out, and which branch to publish to. On every push to your default branch, the action
-rebuilds a clean copy of just your mod and commits it to that branch — the branch you point
-PA at.
+rebuilds a clean copy of just your mod and commits it to that branch — the branch whose `.zip`
+you point PA at.
+
+Because it is an ordinary branch, you can open it and see exactly what a player will download
+before PA ever fetches the archive.
 
 ```jsonc
 // .modbuild

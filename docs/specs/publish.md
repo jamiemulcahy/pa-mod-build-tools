@@ -2,17 +2,21 @@
 
 ## Intent
 
-PA scans an approved mod's GitHub repository and publishes everything it finds to the community
-mod browser. Everything means everything — editor directories, Photoshop sources, test fixtures,
-in at least one case an entire backend solution. The only way to control what players download is
-to point PA at a branch holding just the mod, which authors maintain by hand until they stop.
+PA installs a mod from a zip URL — usually a release artefact, or the `.zip` archive GitHub
+serves for a branch. Whatever that zip contains is what players get, so an archive taken straight
+from a working branch ships everything on it: editor directories, Photoshop sources, test
+fixtures, in at least one case an entire backend solution. Controlling that means keeping a
+branch that holds only the mod and pointing PA at its archive, which authors maintain by hand
+until they stop.
 
 `publish` rebuilds that branch from the source branch on demand, so it stays current without
 anyone remembering to do it.
 
-One constraint shapes the rest: an author must be able to read their `.modbuild` and know what
-will ship. Every rule lives in a file they own, and nothing is withheld that they did not ask to
-have withheld.
+The output is a branch rather than a zip for one reason, and it shapes the rest: a branch can be
+read. The author can open it, see exactly what a player will download, and correct it before PA
+ever fetches the archive. Everything else follows — the rules live in a file the author owns,
+nothing is withheld that they did not ask to have withheld, and `--dry-run` reports the same
+payload without writing anything.
 
 ## Shape
 
