@@ -92,6 +92,9 @@ one place.
 - An option it does not recognise stops the run, as does a `dry-run` that is neither `true` nor
   `false` — so a mistyped request for a dry run never turns into a real publish.
 
+[docs/specs/publish.md](docs/specs/publish.md) and [docs/specs/action.md](docs/specs/action.md)
+describe both in full, including what they deliberately do not do and why.
+
 `.modbuild` itself is taken at face value: keys it does not recognise are ignored, and values of
 the wrong type fail wherever they are first used. A mistyped `ignore` therefore publishes the
 files it was meant to withhold, so check a new config with `--dry-run` before trusting it.
