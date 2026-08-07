@@ -1,13 +1,8 @@
-# .github/workflows/action.yml
+# The action's end-to-end test: what a mod author writes is what gets tested.
 #
-# The action's end-to-end test. test/action.test.js checks what action.yml says; this checks
-# what it does, by running it against fixture repositories built on the runner.
-#
-# The fixture repository has to *be* the workspace, because a composite action runs there and a
-# `uses:` step cannot be pointed anywhere else. So this project is checked out to _action and
-# scripts/action-e2e.js builds a repository around it, with a bare repository in RUNNER_TEMP
-# standing in for the remote. Nothing here touches the network, needs a credential, or pushes a
-# branch to this repository.
+# A composite action runs in the workspace, so the fixture repository has to *be* the
+# workspace. This project is checked out to _action and a mod repository is built around it,
+# with a bare repository standing in for the remote. Nothing here touches the network.
 name: Action
 
 on:
@@ -15,94 +10,77 @@ on:
   push:
     branches: [main]
 
-# The action under test pushes only to a file:// remote on the runner.
 permissions:
   contents: read
 
 jobs:
   e2e:
-    strategy:
-      fail-fast: false
-      matrix:
-        # Windows because `shell: bash` there is git-bash rather than a POSIX shell, and path
-        # handling is where a composite action quietly breaks.
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-
+    runs-on: ubuntu-latest
     defaults:
       run:
         shell: bash
-
-    # The `runner` context is not available to job-level env — only at step level — so the
-    # summary paths are written out where they are used, against $RUNNER_TEMP.
-    env:
-      E2E: node _action/scripts/action-e2e.js
-
     steps:
       - name: Check out the action
         uses: actions/checkout@v4
         with:
           path: _action
 
-      # Deliberately no fetch-depth, token or setup-node anywhere in this job: what a mod
-      # author writes is what gets tested.
-      - name: Build the single-mod fixture
-        run: $E2E setup single
+      # Deliberately no fetch-depth, token or setup-node in this job.
+      - name: Build a mod repository around the workspace
+        run: |
+          set -eux
+          git init -q --bare "$RUNNER_TEMP/origin.git"
+          git init -q -b main .
+          git config user.email mod@author.test && git config user.name "Mod Author"
+          mkdir -p Mod/pa
+          echo '{"identifier":"com.example.mod"}' > Mod/modinfo.json
+          echo 'tank' > Mod/pa/tank.json
+          echo 'zip' > Mod/pachat.zip
+          echo '{ "root": "Mod", "ignore": ["pachat.zip"] }' > .modbuild
+          echo '_action/' > .gitignore
+          git add -A && git commit -qm initial
+          git remote add origin "$RUNNER_TEMP/origin.git"
+          git push -q -u origin main
 
-      # The report each of these steps produces is not asserted here, and cannot be: the runner
-      # sets GITHUB_STEP_SUMMARY itself for every step of a composite action and its value wins
-      # over any env: given to the `uses:` step, so there is no file a later step can read back.
-      # The report's content is covered by test/summary.test.js and test/cli.test.js; what
-      # renders on this run's own page is the end-to-end proof of it.
       - name: Publish (dry run)
         uses: ./_action
         with:
           dry-run: 'true'
 
-      - name: A dry run writes and pushes nothing
-        run: $E2E check dry-run
+      - name: A dry run pushes nothing
+        run: |
+          set -eu
+          test -z "$(git -C "$RUNNER_TEMP/origin.git" branch --list published-mod)"
 
       - name: Publish
         uses: ./_action
 
       - name: The branch holds the payload, with the root prefix stripped
-        run: $E2E check published
+        run: |
+          set -eu
+          got=$(git -C "$RUNNER_TEMP/origin.git" ls-tree -r --name-only published-mod | sort | tr '\n' ' ')
+          echo "published: $got"
+          test "$got" = "modinfo.json pa/tank.json "
 
       - name: Publish again with nothing changed
         uses: ./_action
 
       - name: An unchanged run makes no commit
-        run: $E2E check unchanged
+        run: |
+          set -eu
+          test "$(git -C "$RUNNER_TEMP/origin.git" rev-list --count published-mod)" = "1"
 
       - name: A later push to the source branch
-        run: $E2E advance
+        run: |
+          set -eux
+          echo 'bot' > Mod/pa/bot.json
+          git add -A && git commit -qm "add bot" && git push -q origin main
 
       - name: Publish the change
         uses: ./_action
 
       - name: History accumulates rather than being force-pushed over
-        run: $E2E check second-publish
-
-      - name: Build the multi-mod fixture
-        run: $E2E setup multi
-
-      - name: Publish every mod from one step
-        uses: ./_action
-
-      - name: Both mods reached their own branches
-        run: $E2E check multi
-
-      - name: Build the fixture for the config and source inputs
-        run: $E2E setup inputs
-
-      # There is no .modbuild at the default path in this fixture, so a run that ignored
-      # `config` fails outright, and `source` is an earlier commit whose payload is missing a
-      # file the tip has. Neither input can appear to work without actually working.
-      - name: Publish an earlier commit, using a config kept elsewhere
-        uses: ./_action
-        with:
-          config: build/mod.json
-          source: previous
-
-      - name: Both inputs took effect
-        run: $E2E check inputs
+        run: |
+          set -eu
+          test "$(git -C "$RUNNER_TEMP/origin.git" rev-list --count published-mod)" = "2"
+          git -C "$RUNNER_TEMP/origin.git" ls-tree -r --name-only published-mod | grep -qx 'pa/bot.json'

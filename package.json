@@ -5,18 +5,17 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "pa-mod-build": "src/cli.js"
+    "pa-mod-build": "src/publish.js"
   },
   "engines": {
     "node": ">=20"
   },
   "files": [
-    "src/",
-    "schema/"
+    "src/"
   ],
   "scripts": {
     "test": "node --test",
-    "publish-mod": "node src/cli.js publish"
+    "test:docker": "docker build -q -t pa-mod-build-test . && docker run --rm pa-mod-build-test"
   },
   "dependencies": {
     "ignore": "^7.0.0"
@@ -24,8 +23,5 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/jamiemulcahy/pa-mod-build-tools.git"
-  },
-  "devDependencies": {
-    "yaml": "^2.9.0"
   }
 }

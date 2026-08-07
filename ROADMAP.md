@@ -38,9 +38,16 @@ version bump, tag, npm publish via OIDC, moving major tag.
 List the action on the GitHub Marketplace for discoverability and a canonical page to point
 mod authors at.
 
+## Deliberately not built yet
+
+Phase one is the smallest thing that does the job. These were all removed rather than never
+written, and each earns its way back only when something actually needs it: validation of
+`.modbuild` beyond what `JSON.parse` and git already reject, per-file reporting of which
+ignore rule excluded what, a rendered job summary on the run page, and a `--no-push` mode.
+
 ## …and more tools
 
-The command is built around subcommands so this repo can grow. Candidates, none committed to:
+Candidates, none committed to:
 
 - `validate` — check `modinfo.json` against what the payload actually contains: missing
   `scenes` targets, identifier/folder mismatches, malformed manifests

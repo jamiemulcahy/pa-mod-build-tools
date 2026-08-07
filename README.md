@@ -2,15 +2,6 @@
 
 Build tools for [Planetary Annihilation](https://www.planetaryannihilation.com/) mod authors.
 
-> **Status: the `publish` command and the GitHub Action both work and are tested.** What is
-> still missing is the onboarding that makes them adoptable without reading this file closely —
-> a setup guide, a starter `.modbuild`, and click-through links for adding both (milestone 3,
-> [#4](https://github.com/jamiemulcahy/pa-mod-build-tools/issues/4)) — and the npm package
-> (milestone 4, [#5](https://github.com/jamiemulcahy/pa-mod-build-tools/issues/5)). Until this
-> is released, use the action at `@main` rather than `@v1`. See [ROADMAP.md](ROADMAP.md) for
-> the full sequence and the
-> [enhancement issues](https://github.com/jamiemulcahy/pa-mod-build-tools/issues) for detail.
-
 ## The problem
 
 PA scans an approved mod's GitHub repo and publishes what it finds to the community mod
@@ -37,8 +28,9 @@ PA at.
 }
 ```
 
-A repository that ships more than one mod uses a `mods` array instead, with each entry
-carrying its own `root`, `ignore` and `target`:
+`root` defaults to `.`, `ignore` to nothing, and `target` to `published-mod`. Patterns use
+`.gitignore` syntax, including negation, relative to `root`. A repository shipping more than
+one mod uses a `mods` array instead, each entry carrying its own `root`, `ignore` and `target`:
 
 ```jsonc
 // .modbuild
@@ -70,51 +62,47 @@ jobs:
 ```
 
 No fetch depth, no token, no Node setup. The action takes three optional inputs — `source`,
-`config` and `dry-run` — and `dry-run: 'true'` is the safe way to see what a real run would
-publish. [docs/specs/action.md](docs/specs/action.md) covers all of it, including why each of
-those absent lines is absent.
+`config` and `dry-run`.
 
-Nothing is excluded unless you say so. There are no hidden defaults — the starter `.modbuild`
-ships with sensible rules already written into it, so every rule is visible in a file you own
-and can edit or delete.
+Nothing is excluded unless you say so. There are no hidden defaults.
 
-## Try it
+## Running it yourself
 
-Add the workflow above to your mod's repository with `dry-run: 'true'` set on the action step,
-push, and read the job summary. It reports what would be published and everything that would
-be left out, and writes nothing.
-
-To run the same thing from a terminal instead: the command is not on npm yet, so you need a
-checkout of this repository. From that checkout, point it at your mod's git repository:
+Not on npm yet, so this needs a checkout of this repository. From your mod's repository:
 
 ```bash
-npm run publish-mod -- --repo /path/to/your/mod --dry-run
+node /path/to/pa-mod-build-tools/src/publish.js publish --dry-run
 ```
 
-Nothing is written or pushed. The report gives a count and total size for what would be
-published, and an itemised list of everything left out with the `.modbuild` rule that
-excluded it.
+A dry run writes and pushes nothing. Drop `--dry-run` to publish for real.
 
-The script is `publish-mod` rather than `publish` because npm reserves `publish` as a lifecycle
-hook of `npm publish` — a script by that name would run every time this package was released.
+| Option | Default | |
+|---|---|---|
+| `--source <ref>` | `HEAD` | branch, tag or commit to build from |
+| `--config <path>` | `.modbuild` | where the config lives |
+| `--dry-run` | off | report only |
 
-[docs/specs/publish.md](docs/specs/publish.md) describes the whole command: the `.modbuild`
-format, what a run guarantees, and every way it can fail.
+The publish branch is set in `.modbuild`, not on the command line, so everything about a mod
+lives in one file.
 
-## Design decisions so far
+## What a run guarantees
 
-| Decision | Choice |
-|---|---|
-| What gets stripped | Only what `.modbuild` lists. No built-in denylist. |
-| Ignore syntax | `.gitignore` syntax, including negation, relative to `root` |
-| Which files are considered | Git-tracked files only, so `.gitignore` is honoured for free |
-| Output | A commit on a configurable publish branch. No release artifacts in v1. |
-| Config split | `.modbuild` owns the payload (root, ignore, target); workflow YAML owns plumbing (source, config, dry-run) |
-| Credentials | Whatever `actions/checkout` persisted. The action has no token input of its own. |
-| Packaging | npm package, invoked by a composite action |
+- Only git-tracked files are considered, so your `.gitignore` is honoured for free.
+- Your working tree and source branch are never touched — the whole thing happens in git's
+  object database.
+- A run that changes nothing produces no commit.
+- The publish branch accumulates history; it is never force-pushed over.
+- It refuses to publish onto the branch you have checked out.
 
-See [ROADMAP.md](ROADMAP.md) for how this gets built, and the individual issues for full
-detail and open questions.
+## Tests
+
+```bash
+npm test           # against your own git
+npm run test:docker  # against a pinned git and Node, with no host config in scope
+```
+
+Every test drives the real command against a real repository with a bare repository standing
+in for GitHub, and asserts on what lands on the published branch. Nothing is mocked.
 
 ## Licence
 
