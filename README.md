@@ -61,8 +61,7 @@ jobs:
       - uses: jamiemulcahy/pa-mod-build-tools@main
 ```
 
-No fetch depth, no token, no Node setup. The action takes three optional inputs — `source`,
-`config` and `dry-run`.
+No fetch depth, no token, no Node setup. The action takes one optional input, `dry-run`.
 
 Nothing is excluded unless you say so. There are no hidden defaults.
 
