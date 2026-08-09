@@ -73,7 +73,8 @@ One line per mod: what was published and where, or that nothing changed.
 
 | Situation | What the author gets |
 |---|---|
-| No `.modbuild` where the command runs | The run stops before anything is resolved. |
+| No `.modbuild` where the command runs | `no .modbuild in this directory`, and nothing is resolved. |
+| `.modbuild` is not valid JSON | The parse failure, naming the line to correct. Nothing is resolved. |
 | `root` matches no tracked files | `nothing to publish from "<root>"`, and nothing is written. |
 | An argument the command does not recognise | The usage line, and nothing is published. |
 | The publish branch holds history this run cannot build on | The push is refused, the run fails, and the branch is left as it was. |

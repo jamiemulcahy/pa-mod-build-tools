@@ -4,13 +4,24 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const CLI = fileURLToPath(new URL('../src/publish.js', import.meta.url))
 const lines = (text) => text.split('\n').filter(Boolean)
+
+// The setup guide is where a mod author copies their first config and workflow from, so those
+// blocks are treated as shipped artefacts and driven through the real command below. Both are the
+// first fence of their language in the file: the starter config, then the multi-mod example; the
+// workflow, then nothing else.
+const doc = (name) => readFileSync(fileURLToPath(new URL(`../${name}`, import.meta.url)), 'utf8')
+function block (name, language) {
+  const match = doc(name).match(new RegExp('```' + language + '\\n([\\s\\S]*?)```'))
+  assert.ok(match, `${name} must contain a ${language} block`)
+  return match[1]
+}
 
 // A throwaway mod repository, with a bare repo standing in for GitHub.
 function fixture (files) {
@@ -221,7 +232,22 @@ test('reports a missing .modbuild rather than publishing something arbitrary', (
   const repo = fixture({ 'modinfo.json': 'm' })
   const result = repo.publish()
   assert.equal(result.code, 1)
-  assert.match(result.err, /ENOENT|no such file/i)
+  assert.match(result.err, /no \.modbuild in this directory/)
+  assert.doesNotMatch(result.err, /at \w+ \(node:/, 'a stack trace is not something a mod author can act on')
+})
+
+// The likeliest mistake of the lot: the file is edited by hand in the github.com editor, by
+// someone who has never written JSON before.
+test('reports a malformed .modbuild with the line the author has to fix', () => {
+  const repo = fixture({ ...MOD, '.modbuild': '{\n  "root": "Mod",\n  "target": "published-mod",\n}\n' })
+  const result = repo.publish()
+  assert.equal(result.code, 1)
+  assert.match(result.err, /\.modbuild:/)
+  // Where the fault is, not how it is worded: V8 only started appending "(line 4 column 1)" to
+  // the position in Node 22, and the supported floor is 20.
+  assert.match(result.err, /position \d+/)
+  assert.doesNotMatch(result.err, /at JSON\.parse/, 'a stack trace is not something a mod author can act on')
+  assert.deepEqual(repo.branches(), ['main'], 'nothing must be published from a file that did not parse')
 })
 
 test('an unrecognised argument stops the run rather than quietly publishing for real', () => {
@@ -280,6 +306,42 @@ test('a push that would discard published history is refused', () => {
   assert.equal(result.code, 1)
   assert.match(result.err, /non-fast-forward|rejected|fetch first/i)
   assert.equal(repo.tip(), beforeSha, 'remote history must survive')
+})
+
+// The starter config is the first thing a mod author commits, and they commit it by copying it
+// out of the guide without being able to test it. Driving the guide's own text through the real
+// command is what stops the two drifting — a prefilled config that does not parse, or that
+// publishes the files it promises to withhold, is the worst thing this repository could ship.
+test('the starter .modbuild in the setup guide publishes the mod and withholds everything else', () => {
+  const starter = block('docs/setup.md', 'json')
+  assert.doesNotThrow(() => JSON.parse(starter), 'the starter .modbuild must be valid JSON')
+
+  const repo = fixture({
+    '.modbuild': starter,
+    'modinfo.json': '{"identifier":"com.example.mod"}',
+    'pa/units/tank.json': 'tank',
+    'ui/main/game.js': 'ui',
+    // One file for every rule the starter carries, so a rule quietly dropped from the guide fails
+    // here rather than in somebody's mod.
+    '.gitattributes': '* text=auto',
+    '.github/workflows/publish-mod.yml': 'name: Publish mod',
+    '.vscode/settings.json': 'settings',
+    '.idea/workspace.xml': 'workspace',
+    '.claude/settings.json': 'settings',
+    'CLAUDE.md': 'notes',
+    'AGENTS.md': 'notes',
+    'art/logo.psd': 'psd',
+    'art/logo.xcf': 'xcf'
+  })
+
+  assert.equal(repo.publish().code, 0)
+  assert.deepEqual(repo.published(), ['modinfo.json', 'pa/units/tank.json', 'ui/main/game.js'])
+})
+
+// Two copies of the workflow exist because the README is the shop window and the guide is the
+// walkthrough, and both have to be right.
+test('the workflow in the setup guide and the README are the same file', () => {
+  assert.equal(block('docs/setup.md', 'yaml'), block('README.md', 'yaml'))
 })
 
 // Kills the mutation that moves the local ref before the push: a payload that never reached the
