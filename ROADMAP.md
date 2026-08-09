@@ -23,8 +23,8 @@ its own repo's code, so it works before anything is published to a registry.
 
 ## 3. Onboarding — [#4](https://github.com/jamiemulcahy/pa-mod-build-tools/issues/4)
 
-`docs/setup.md`, a starter `.modbuild`, and prefilled "new file" links that let a modder add
-the workflow and config with a few clicks and no local tooling.
+`docs/setup.md` and a starter `.modbuild`, so a mod author can add the workflow and config from
+github.com with no local tooling at all.
 
 **This is the first point a non-technical mod author can adopt the tool.**
 

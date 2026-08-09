@@ -44,10 +44,9 @@ one mod uses a `mods` array instead, each entry carrying its own `root`, `ignore
 ] }
 ```
 
-The workflow that runs it is the whole of this:
+The whole of `.github/workflows/publish-mod.yml` is this:
 
 ```yaml
-# .github/workflows/publish-mod.yml
 name: Publish mod
 
 on:
@@ -68,6 +67,13 @@ jobs:
 No fetch depth, no token, no Node setup. The action takes one optional input, `dry-run`.
 
 Nothing is excluded unless you say so. There are no hidden defaults.
+
+## Setting it up on your mod
+
+**[docs/setup.md](docs/setup.md)** walks through it from nothing: no terminal, no local tooling,
+about a minute of clicking on github.com. It carries a starter `.modbuild` covering the usual
+editor and tooling files, the arrangement to use if your mod is already listed in Community Mods,
+and a troubleshooting table for everything a run can tell you.
 
 ## Running it yourself
 

@@ -27,7 +27,14 @@ const argv = process.argv.slice(2)
 const dryRun = argv[1] === '--dry-run'
 if (argv[0] !== 'publish' || argv.length > (dryRun ? 2 : 1)) die('usage: pa-mod-build publish [--dry-run]')
 
-const raw = JSON.parse(readFileSync('.modbuild', 'utf8'))
+// Hand-edited by people who have no terminal to read a stack trace in, so a missing file and a
+// trailing comma both have to arrive as something the author can act on.
+let raw
+try {
+  raw = JSON.parse(readFileSync('.modbuild', 'utf8'))
+} catch (error) {
+  die(error.code === 'ENOENT' ? 'no .modbuild in this directory' : `.modbuild: ${error.message}`)
+}
 const mods = (raw.mods ?? [raw]).map((mod) => ({ root: '.', ignore: [], target: 'published-mod', ...mod }))
 const sha = line(['rev-parse', 'HEAD^{commit}'])
 const remote = line(['remote']).split('\n').includes('origin') ? 'origin' : null
