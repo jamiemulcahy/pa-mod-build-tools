@@ -17,7 +17,7 @@
     "test": "node --test"
   },
   "dependencies": {
-    "ignore": "^7.0.0"
+    "ignore": "^7.0.8"
   },
   "repository": {
     "type": "git",
